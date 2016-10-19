@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="ASCII"?><project>
+	<version>1.0</version>
+	<configs>
+		<config category="opl" default="false" name="Instance0">
+			<ref name="Ass2.mod" type="model">
+			</ref>
+			<ref name="Ass2.ops" type="setting">
+			</ref>
+			<ref name="Instance0.dat" type="data">
+			</ref>
+		</config>
+		<config category="opl" default="false" name="Instance1">
+			<ref name="Instance1.dat" type="data">
+			</ref>
+			<ref name="Ass2.mod" type="model">
+			</ref>
+			<ref name="Ass2.ops" type="setting">
+			</ref>
+		</config>
+		<config category="opl" default="true" name="MultipleRuns">
+			<ref name="MultipleRunsSkeleton.mod" type="model">
+			</ref>
+			<ref name="Ass2.ops" type="setting">
+			</ref>
+		</config>
+	</configs>
+	
+</project>
