@@ -4,6 +4,7 @@
  * Creation Date: 19 Oct 2016 at 15:23:24
  *********************************************/
 
+
 tuple Product {
 	key int productId;
 	string name;
@@ -11,84 +12,84 @@ tuple Product {
 {Product} Products = ...;
 
 tuple Demand {
-	key string DEMAND_ID;
-	int PRODUCT_ID	;
-	int QUANTITY;
-	int DELIVERY_MIN;
-	int DELIVERY_MAX;
-	float NON_DELIVERY_VARIABLE_COST;
-	int DUE_TIME;
-	float TARDINESS_VARIABLE_COST;
+	key string demandId;
+	int productId	;
+	int quantity;
+	int deliveryMin;
+	int deliveryMax;
+	float nonDeliveryVariableCost;
+	int due_time;
+	float tardinessVariableCost;
 }
 {Demand} Demands = ...;
 
 tuple Resource {
-	key string RESOURCE_ID;
-	int RESOURCE_NR;
-	string SETUP_MATRIX_ID;
-	int INITIAL_PRODUCT_ID;
+	key string resourceId;
+	int resourceNr;
+	string setupMatrixId;
+	int initialProductId;
 }
 {Resource} Resources = ...;
 
 tuple SetupResource {
-	key string SETUP_RESOURCE_ID;
+	key string setupResourceId;
 }
 {SetupResource} SetupResources = ...;
 
 tuple StorageTank {
-	key string STORAGE_TANK_ID;
-	string NAME;
-	int QUANTITY_MAX;
-	string SETUP_MATRIX_ID;
-	int INITIAL_PRODUCT_ID;
+	key string storageTankId;
+	string name;
+	int quantityMax;
+	string setupMatrixId;
+	int initialProductId;
 }
 {StorageTank} StorageTanks = ...;
 
 tuple Step {
-	key string STEP_ID;
-	int PRODUCT_ID;
-	string SETUP_RESOURCE_ID;
+	key string stepId;
+	int productId;
+	string setupResourceId;
 }
 {Step} Steps = ...;
 
 tuple Precedence {
-	string PREDECESSOR_ID;
-	string SUCCESSOR_ID;
-	int DELAY_MIN;
-	int DELAY_MAX;
+	string predecessorId;
+	string successorId;
+	int delayMin;
+	int delayMax;
 }
 {Precedence} Precedences = ...;
 
 tuple Alternative {
-	key string STEP_ID;
-	key int ALTERNATIVE_NUMBER;
-	string RESOURCE_ID;
-	int FIXED_PROCESSING_TIME;
-	float VARIABLE_PROCESSING_TIME;
-	float FIXED_PROCESSING_COST;
-	float VARIABLE_PROCESSING_COST;
+	key string stepId;
+	key int alternativeNumber;
+	string resourceId;
+	int fixedProcessingTime;
+	float variableProcessingTime;
+	float fixedProcessingCost;
+	float variableProcessingCost;
 }
 {Alternative} Alternatives = ...;
 
 tuple StorageProduction {
-	key string PROD_STEP_ID;
-	key string STORAGE_TANK_ID;
-	string CONS_STEP_ID;
+	key string prodStepId;
+	key string storageTankId;
+	string consStepId;
 }
 {StorageProduction} StorageProductions = ...;
 
 tuple Setup {
-	key string SETUP_MATRIX_ID;
-	key int FROM_STATE;
-	key int TO_STATE;
-	int SETUP_TIME;
-	int SETUP_COST;
+	key string setupMatrixId;
+	key int fromState;
+	key int toState;
+	int setupTime;
+	int setupCost;
 }
 {Setup} Setups = ...;
 
 tuple CriterionWeight {
-	key string CRITERION_ID;
-	float WEIGHT;
+	key string criterionId;
+	float weight;
 }
 {CriterionWeight} CriterionWeights = ...;
 
