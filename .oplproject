@@ -31,6 +31,14 @@
 			<ref name="Ass2.ops" type="setting">
 			</ref>
 		</config>
+		<config category="opl" default="false" name="Instance2">
+			<ref name="Ass2.ops" type="setting">
+			</ref>
+			<ref name="Ass2.mod" type="model">
+			</ref>
+			<ref name="Instance2.dat" type="data">
+			</ref>
+		</config>
 	</configs>
 	
 </project>

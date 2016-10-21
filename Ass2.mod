@@ -4,6 +4,7 @@
  * Creation Date: 19 Oct 2016 at 15:23:24
  *********************************************/
 
+using CP;
 
 tuple Product {
 	key int productId;
@@ -87,22 +88,48 @@ tuple Setup {
 }
 {Setup} Setups = ...;
 
+{string} CritConsts = {"NonDeliveryCost", "ProcessingCost", "SetupCost", "TardinessCost"};
 tuple CriterionWeight {
 	key string criterionId;
 	float weight;
 }
-{CriterionWeight} CriterionWeights = ...;
+{CriterionWeight} CriterionWeights with criterionId in CritConsts = ...;
 
-//our vars here..
+
+//dvar interval precOperations[dem in Demands][st in Steps];
+dvar interval operations[dem in Demands][st in Steps]
+	optional(1)
+	size 10; //todo get it from data!
+
+pwlFunction tardinessFees[dem in Demands] = piecewise{0->100; 400}(100, 0); //todo get it from the xls data
+
+dexpr float NonDeliveryCost = 0;
+dexpr float ProcessingCost = 0;
+dexpr float SetupCost = 0;
+// this gonna be a sum of all demand [max of all 'step' endEval(operations[demand][<'step'>], tardinessFees)]
+dexpr float TardinessCost = 0;
 
 execute {
 //	cp.param.Workers = 1;
 //	cp.param.TimeLimit = 5;
  
 }
-
+minimize
+  NonDeliveryCost * item(CriterionWeights, ord(CriterionWeights, <"NonDeliveryCost">)).weight
+  + ProcessingCost * item(CriterionWeights, ord(CriterionWeights, <"ProcessingCost">)).weight
+  + SetupCost * item(CriterionWeights, ord(CriterionWeights, <"SetupCost">)).weight
+  + TardinessCost * item(CriterionWeights, ord(CriterionWeights, <"TardinessCost">)).weight;
+//    sum(crit in CriterionWeights) CriterionVals[crit.criterionId] * CritWeights[crit];
 subject to {
-
+	forall(dem in Demands, st in Steps: dem.productId == st.productId) 
+	{	
+		presenceOf(operations[dem][st]);
+		//todo fit some storagest in between..
+	}
+	forall(dem in Demands, st in Steps: dem.productId != st.productId) 
+	{	
+		!presenceOf(operations[dem][st]);
+	}
 }
 
 tuple DemandAssignment {
@@ -148,8 +175,7 @@ tuple StorageAssignment {
 //{StorageAssignment} storageAssignments = fill in from your decision variables.
 
 execute {
-	writeln("hello")
-
+	writeln("hello");
 //	writeln("Total Non-Delivery Cost : ", TotalNonDeliveryCost);
 //	writeln("Total Processing Cost : ", TotalProcessingCost);
 //	writeln("Total Setup Cost : ", TotalSetupCost);
