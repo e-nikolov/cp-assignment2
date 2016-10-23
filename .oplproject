@@ -17,13 +17,13 @@
 			<ref name="Ass2.ops" type="setting">
 			</ref>
 		</config>
-		<config category="opl" default="true" name="MultipleRuns">
+		<config category="opl" default="false" name="MultipleRuns">
 			<ref name="MultipleRunsSkeleton.mod" type="model">
 			</ref>
 			<ref name="Ass2.ops" type="setting">
 			</ref>
 		</config>
-		<config category="opl" default="false" name="foodPrecedence">
+		<config category="opl" default="true" name="foodPrecedence">
 			<ref name="foodPrecedence1.dat" type="data">
 			</ref>
 			<ref name="Ass2.mod" type="model">

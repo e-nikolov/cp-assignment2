@@ -95,15 +95,29 @@ tuple CriterionWeight {
 }
 {CriterionWeight} CriterionWeights with criterionId in CritConsts = ...;
 
+//todo add interval variable for every demand that will be used with span()..
 tuple DemandStep {
 	Demand demand;
 	Step step;
 }
 {DemandStep} DemSteps = {<d,st> | d in Demands, st in Steps : d.productId == st.productId};
 
-dvar interval operations[<d,st> in DemSteps] 
+dvar interval operations[<dem,st> in DemSteps] 
 	optional(1);
 
+tuple triplet {int loc1; int loc2; int value;}; 
+{triplet} setupTimes = 
+	{<i,j,1> | i,j in 1..4 : abs(i-j)>1}; //todo set transitions from the setupMatrix
+	
+dvar sequence resources[res in Resources] in
+	all (dem in Demands,st in Steps, alt in Alternatives
+		: res.resourceId == alt.resourceId && st.stepId == alt.stepId 
+		&& dem.productId == item(Steps, ord(Steps, <alt.stepId>)).productId) 
+			operations[<dem,st>];
+//	all (dem in Demands, st in Steps) operations[<dem,st>];
+//dvar sequence workers[w in WorkerNames] in
+//	all(h in Houses, t in TaskNames: Worker[t]==w) task[h][t]; 
+	
 pwlFunction tardinessFees[dem in Demands] = piecewise{0->100; 400}(100, 0); //todo get it from the xls data
 
 dexpr float NonDeliveryCost = 0;
@@ -123,10 +137,14 @@ minimize
   + SetupCost * item(CriterionWeights, ord(CriterionWeights, <"SetupCost">)).weight
   + TardinessCost * item(CriterionWeights, ord(CriterionWeights, <"TardinessCost">)).weight;
 subject to {
-	forall(<d,st> in DemSteps) // setting the size this way
-	    endOf(operations[<d,st>]) - startOf(operations[<d,st>]) == 20
+	forall(<dem,st> in DemSteps) // setting the size this way
+	    endOf(operations[<dem,st>]) - startOf(operations[<dem,st>]) == 20
 	    ||
-	    endOf(operations[<d,st>]) - startOf(operations[<d,st>]) == 10;
+	    endOf(operations[<dem,st>]) - startOf(operations[<dem,st>]) == 10;
+//	forall seq_res in resourse sequences 
+//	    noOverlap(seq_res) where seq_res is a set of all operations tied to a certain resource
+	forall(res in Resources)
+	    noOverlap(resources[res], setupTimes, 1);
 }
 
 tuple DemandAssignment {
