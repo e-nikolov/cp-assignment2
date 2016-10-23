@@ -95,11 +95,14 @@ tuple CriterionWeight {
 }
 {CriterionWeight} CriterionWeights with criterionId in CritConsts = ...;
 
+tuple DemandStep {
+	Demand demand;
+	Step step;
+}
+{DemandStep} DemSteps = {<d,st> | d in Demands, st in Steps : d.productId == st.productId};
 
-//dvar interval precOperations[dem in Demands][st in Steps];
-dvar interval operations[dem in Demands][st in Steps]
-	optional(1)
-	size 10; //todo get it from data!
+dvar interval operations[<d,st> in DemSteps] 
+	optional(1);
 
 pwlFunction tardinessFees[dem in Demands] = piecewise{0->100; 400}(100, 0); //todo get it from the xls data
 
@@ -119,17 +122,11 @@ minimize
   + ProcessingCost * item(CriterionWeights, ord(CriterionWeights, <"ProcessingCost">)).weight
   + SetupCost * item(CriterionWeights, ord(CriterionWeights, <"SetupCost">)).weight
   + TardinessCost * item(CriterionWeights, ord(CriterionWeights, <"TardinessCost">)).weight;
-//    sum(crit in CriterionWeights) CriterionVals[crit.criterionId] * CritWeights[crit];
 subject to {
-	forall(dem in Demands, st in Steps: dem.productId == st.productId) 
-	{	
-		presenceOf(operations[dem][st]);
-		//todo fit some storagest in between..
-	}
-	forall(dem in Demands, st in Steps: dem.productId != st.productId) 
-	{	
-		!presenceOf(operations[dem][st]);
-	}
+	forall(<d,st> in DemSteps) // setting the size this way
+	    endOf(operations[<d,st>]) - startOf(operations[<d,st>]) == 20
+	    ||
+	    endOf(operations[<d,st>]) - startOf(operations[<d,st>]) == 10;
 }
 
 tuple DemandAssignment {
