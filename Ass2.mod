@@ -104,7 +104,8 @@ tuple DemandStep {
 dvar interval prodSteps[<dem,st> in DemSteps] 
 	optional(1);
 
-dvar interval demand[d in Demands];
+dvar interval demand[d in Demands]
+	optional(1);
 
 {int} ProductIds = union(p in Products) {p.productId};
 tuple triplet {int prod1; int prod2; int time;}; 
@@ -137,14 +138,17 @@ dvar interval DemStepAlternative[<<dem,st>,alt> in DemandStepAlternative]
 	
 pwlFunction tardinessFees[dem in Demands] = piecewise{0->100; 400}(100, 0); //todo get it from the xls data
 
-dexpr float NonDeliveryCost = 0;
-dexpr float ProcessingCost = 0;
+dexpr float NonDeliveryCost = sum(dem in Demands) (1 - presenceOf(demand[dem]))
+											* (dem.quantity * dem.nonDeliveryVariableCost); // see presence of all demand sum(d in Demands) precenseof(demand[d])*the cost to not have it
+dexpr float ProcessingCost = sum(<<dem,st>,alt> in DemandStepAlternative) 
+								presenceOf(DemStepAlternative[<<dem,st>,alt>])
+								*(alt.fixedProcessingCost + dem.quantity * alt.variableProcessingCost);
 dexpr float SetupCost = 0;
 // this gonna be a sum of all demand [max of all 'step' endEval(operations[demand][<'step'>], tardinessFees)]
 dexpr float TardinessCost = 0;
 
 execute {
-//	cp.param.Workers = 1;
+	cp.param.Workers = 1;
 	cp.param.TimeLimit = 30;
 }
 minimize
@@ -152,17 +156,16 @@ minimize
   + ProcessingCost * item(CriterionWeights, ord(CriterionWeights, <"ProcessingCost">)).weight
   + SetupCost * item(CriterionWeights, ord(CriterionWeights, <"SetupCost">)).weight
   + TardinessCost * item(CriterionWeights, ord(CriterionWeights, <"TardinessCost">)).weight;
-subject to {
-	forall(<dem,st> in DemSteps)
-	    endOf(prodSteps[<dem,st>]) - startOf(prodSteps[<dem,st>]) == 10;
-	    
+subject to {	    
 	forall(<d,st> in DemSteps)
   		alternative(prodSteps[<d,st>], 
   			all(alt in Alternatives: alt.stepId == st.stepId) DemStepAlternative[<<d,st>,alt>]);
   		
 	forall(res in Resources)
 	    noOverlap(resources[res], setupTimes[res], 1);
-	
+	forall(<d,st> in DemSteps)
+	  	presenceOf(demand[d]) => presenceOf(prodSteps[<d,st>]);
+	  	
 	forall(d in Demands)
 	    span(demand[d], all(st in Steps : d.productId == st.productId) prodSteps[<d,st>]);
 	    
