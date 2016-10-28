@@ -39,6 +39,14 @@
 			<ref name="Instance2.dat" type="data">
 			</ref>
 		</config>
+		<config category="opl" default="false" name="foodSetup1">
+			<ref name="foodSetup1.dat" type="data">
+			</ref>
+			<ref name="Ass2.ops" type="setting">
+			</ref>
+			<ref name="Ass2.mod" type="model">
+			</ref>
+		</config>
 	</configs>
 	
 </project>
