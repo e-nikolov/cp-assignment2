@@ -95,28 +95,45 @@ tuple CriterionWeight {
 }
 {CriterionWeight} CriterionWeights with criterionId in CritConsts = ...;
 
-//todo add interval variable for every demand that will be used with span()..
 tuple DemandStep {
 	Demand demand;
 	Step step;
 }
 {DemandStep} DemSteps = {<d,st> | d in Demands, st in Steps : d.productId == st.productId};
 
-dvar interval operations[<dem,st> in DemSteps] 
+dvar interval prodSteps[<dem,st> in DemSteps] 
 	optional(1);
 
-tuple triplet {int loc1; int loc2; int value;}; 
-{triplet} setupTimes = 
-	{<i,j,1> | i,j in 1..4 : abs(i-j)>1}; //todo set transitions from the setupMatrix
+dvar interval demand[d in Demands];
+
+{int} ProductIds = union(p in Products) {p.productId};
+tuple triplet {int prod1; int prod2; int time;}; 
+
+int maxResTime = max(s in Setups) s.setupTime;
+{triplet} setupTimes[res in Resources] = 
+	{<p1,p2,t> | p1,p2 in ProductIds, t in 0..maxResTime: t == p1};
+//	{<p1,p2,t> | p1,p2 in ProductIds, stp in Setups, t in 0..maxResTime
+//		: stp.fromState == p1 && stp.toState == p2 
+//			&& stp.setupMatrixId == res.setupMatrixId && t == stp.setupTime};
 	
 dvar sequence resources[res in Resources] in
 	all (dem in Demands,st in Steps, alt in Alternatives
 		: res.resourceId == alt.resourceId && st.stepId == alt.stepId 
-		&& dem.productId == item(Steps, ord(Steps, <alt.stepId>)).productId) 
-			operations[<dem,st>];
-//	all (dem in Demands, st in Steps) operations[<dem,st>];
-//dvar sequence workers[w in WorkerNames] in
-//	all(h in Houses, t in TaskNames: Worker[t]==w) task[h][t]; 
+		  && dem.productId == item(Steps, ord(Steps, <alt.stepId>)).productId) 
+			prodSteps[<dem,st>];
+
+
+tuple DemandStepAlternatives {
+	DemandStep demStep;
+	Alternative altern;
+}
+{DemandStepAlternatives} DemandStepAlternative = 
+	{<<dem,st>,alt> | <dem,st> in DemSteps, alt in Alternatives
+		: st.stepId == item(Steps, ord(Steps, <alt.stepId>)).stepId};
+dvar interval DemStepAlternative[<<dem,st>,alt> in DemandStepAlternative] 
+	optional(1)
+	size ftoi(ceil(alt.fixedProcessingTime + alt.variableProcessingTime * dem.quantity));
+
 	
 pwlFunction tardinessFees[dem in Demands] = piecewise{0->100; 400}(100, 0); //todo get it from the xls data
 
@@ -128,8 +145,7 @@ dexpr float TardinessCost = 0;
 
 execute {
 //	cp.param.Workers = 1;
-//	cp.param.TimeLimit = 5;
- 
+	cp.param.TimeLimit = 30;
 }
 minimize
   NonDeliveryCost * item(CriterionWeights, ord(CriterionWeights, <"NonDeliveryCost">)).weight
@@ -137,14 +153,20 @@ minimize
   + SetupCost * item(CriterionWeights, ord(CriterionWeights, <"SetupCost">)).weight
   + TardinessCost * item(CriterionWeights, ord(CriterionWeights, <"TardinessCost">)).weight;
 subject to {
-	forall(<dem,st> in DemSteps) // setting the size this way
-	    endOf(operations[<dem,st>]) - startOf(operations[<dem,st>]) == 20
-	    ||
-	    endOf(operations[<dem,st>]) - startOf(operations[<dem,st>]) == 10;
-//	forall seq_res in resourse sequences 
-//	    noOverlap(seq_res) where seq_res is a set of all operations tied to a certain resource
+	forall(<dem,st> in DemSteps)
+	    endOf(prodSteps[<dem,st>]) - startOf(prodSteps[<dem,st>]) == 10;
+	    
+	forall(<d,st> in DemSteps)
+  		alternative(prodSteps[<d,st>], 
+  			all(alt in Alternatives: alt.stepId == st.stepId) DemStepAlternative[<<d,st>,alt>]);
+  		
 	forall(res in Resources)
-	    noOverlap(resources[res], setupTimes, 1);
+	    noOverlap(resources[res], setupTimes[res], 1);
+	
+	forall(d in Demands)
+	    span(demand[d], all(st in Steps : d.productId == st.productId) prodSteps[<d,st>]);
+	    
+	
 }
 
 tuple DemandAssignment {
