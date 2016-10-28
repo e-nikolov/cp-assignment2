@@ -116,13 +116,6 @@ int maxResTime = max(s in Setups) s.setupTime;
 //	{<p1,p2,t> | p1,p2 in ProductIds, stp in Setups, t in 0..maxResTime
 //		: stp.fromState == p1 && stp.toState == p2 
 //			&& stp.setupMatrixId == res.setupMatrixId && t == stp.setupTime};
-	
-dvar sequence resources[res in Resources] in
-	all (dem in Demands,st in Steps, alt in Alternatives
-		: res.resourceId == alt.resourceId && st.stepId == alt.stepId 
-		  && dem.productId == item(Steps, ord(Steps, <alt.stepId>)).productId) 
-			prodSteps[<dem,st>];
-
 
 tuple DemandStepAlternatives {
 	DemandStep demStep;
@@ -136,6 +129,14 @@ dvar interval DemStepAlternative[<<dem,st>,alt> in DemandStepAlternative]
 	size ftoi(ceil(alt.fixedProcessingTime + alt.variableProcessingTime * dem.quantity));
 
 	
+dvar sequence resources[res in Resources] in
+	all (dem in Demands,st in Steps, alt in Alternatives
+		: res.resourceId == alt.resourceId && st.stepId == alt.stepId 
+		  && dem.productId == item(Steps, ord(Steps, <alt.stepId>)).productId)
+		    DemStepAlternative[<<dem,st>,alt>];
+//			prodSteps[<dem,st>];
+
+
 pwlFunction tardinessFees[dem in Demands] = piecewise{0->100; 400}(100, 0); //todo get it from the xls data
 
 dexpr float NonDeliveryCost = sum(dem in Demands) (1 - presenceOf(demand[dem]))
@@ -163,9 +164,14 @@ subject to {
   		
 	forall(res in Resources)
 	    noOverlap(resources[res], setupTimes[res], 1);
+	    
 	forall(<d,st> in DemSteps)
-	  	presenceOf(demand[d]) => presenceOf(prodSteps[<d,st>]);
-	  	
+	  	presenceOf(demand[d]) == presenceOf(prodSteps[<d,st>]);
+	
+	forall(<d1,st1> in DemSteps, <d2,st2> in DemSteps, p in Precedences
+				:st1.stepId == p.predecessorId && st2.stepId == p.successorId && d1 == d2)
+		endBeforeStart(prodSteps[<d1,st1>], prodSteps[<d2,st2>]);
+	
 	forall(d in Demands)
 	    span(demand[d], all(st in Steps : d.productId == st.productId) prodSteps[<d,st>]);
 	    
