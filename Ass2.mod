@@ -101,10 +101,11 @@ tuple DemandStep {
 }
 {DemandStep} DemSteps = {<d,st> | d in Demands, st in Steps : d.productId == st.productId};
 
-dvar interval prodSteps[<dem,st> in DemSteps] 
+dvar interval prodSteps[<dem,st> in DemSteps] //todo add "in min .. max" 
 	optional(1);
 
-dvar interval demand[d in Demands]
+//todo, some demands have minimum
+dvar interval demand[d in Demands] //todo add "in min .. max"
 	optional(1);
 
 {int} ProductIds = union(p in Products) {p.productId};
@@ -124,7 +125,7 @@ tuple DemandStepAlternatives {
 {DemandStepAlternatives} DemandStepAlternative = 
 	{<<dem,st>,alt> | <dem,st> in DemSteps, alt in Alternatives
 		: st.stepId == item(Steps, ord(Steps, <alt.stepId>)).stepId};
-dvar interval DemStepAlternative[<<dem,st>,alt> in DemandStepAlternative] 
+dvar interval DemStepAlternative[<<dem,st>,alt> in DemandStepAlternative] //todo add "in min .. max"
 	optional(1)
 	size ftoi(ceil(alt.fixedProcessingTime + alt.variableProcessingTime * dem.quantity));
 
@@ -134,29 +135,37 @@ dvar sequence resources[res in Resources] in
 		: res.resourceId == alt.resourceId && st.stepId == alt.stepId 
 		  && dem.productId == item(Steps, ord(Steps, <alt.stepId>)).productId)
 		    DemStepAlternative[<<dem,st>,alt>];
-//			prodSteps[<dem,st>];
 
 
-pwlFunction tardinessFees[dem in Demands] = piecewise{0->100; 400}(100, 0); //todo get it from the xls data
+pwlFunction tardinessFees[dem in Demands] = 
+				piecewise{0->dem.due_time; dem.tardinessVariableCost}(dem.due_time, 0);
+dexpr float TardinessCost = sum(dem in Demands) endEval(demand[dem], tardinessFees[dem]);
 
-dexpr float NonDeliveryCost = sum(dem in Demands) (1 - presenceOf(demand[dem]))
-											* (dem.quantity * dem.nonDeliveryVariableCost); // see presence of all demand sum(d in Demands) precenseof(demand[d])*the cost to not have it
+dexpr float NonDeliveryCost = sum(dem in Demands)
+		 		(1 - presenceOf(demand[dem])) * (dem.quantity * dem.nonDeliveryVariableCost);
+
 dexpr float ProcessingCost = sum(<<dem,st>,alt> in DemandStepAlternative) 
 								presenceOf(DemStepAlternative[<<dem,st>,alt>])
 								*(alt.fixedProcessingCost + dem.quantity * alt.variableProcessingCost);
+
 dexpr float SetupCost = 0;
-// this gonna be a sum of all demand [max of all 'step' endEval(operations[demand][<'step'>], tardinessFees)]
-dexpr float TardinessCost = 0;
+
+dexpr float WeightedTardinessCost = 
+		TardinessCost * item(CriterionWeights, ord(CriterionWeights, <"TardinessCost">)).weight;
+dexpr float WeightedNonDeliveryCost = 
+		NonDeliveryCost * item(CriterionWeights, ord(CriterionWeights, <"NonDeliveryCost">)).weight;
+dexpr float WeightedProcessingCost =
+		ProcessingCost * item(CriterionWeights, ord(CriterionWeights, <"ProcessingCost">)).weight;
+dexpr float WeightedSetupCost = 
+		SetupCost * item(CriterionWeights, ord(CriterionWeights, <"SetupCost">)).weight;
+
 
 execute {
 	cp.param.Workers = 1;
 	cp.param.TimeLimit = 30;
 }
-minimize
-  NonDeliveryCost * item(CriterionWeights, ord(CriterionWeights, <"NonDeliveryCost">)).weight
-  + ProcessingCost * item(CriterionWeights, ord(CriterionWeights, <"ProcessingCost">)).weight
-  + SetupCost * item(CriterionWeights, ord(CriterionWeights, <"SetupCost">)).weight
-  + TardinessCost * item(CriterionWeights, ord(CriterionWeights, <"TardinessCost">)).weight;
+minimize 
+  WeightedTardinessCost + WeightedNonDeliveryCost + WeightedProcessingCost + WeightedSetupCost;
 subject to {	    
 	forall(<d,st> in DemSteps)
   		alternative(prodSteps[<d,st>], 
