@@ -113,10 +113,9 @@ tuple triplet {int prod1; int prod2; int time;};
 
 int maxResTime = max(s in Setups) s.setupTime;
 {triplet} setupTimes[res in Resources] = 
-	{<p1,p2,t> | p1,p2 in ProductIds, t in 0..maxResTime: t == p1};
-//	{<p1,p2,t> | p1,p2 in ProductIds, stp in Setups, t in 0..maxResTime
-//		: stp.fromState == p1 && stp.toState == p2 
-//			&& stp.setupMatrixId == res.setupMatrixId && t == stp.setupTime};
+	{<p1,p2,t> | p1,p2 in ProductIds, stp in Setups, t in 0..maxResTime
+		: stp.fromState == p1 && stp.toState == p2 
+			&& stp.setupMatrixId == res.setupMatrixId && t == stp.setupTime};
 
 tuple DemandStepAlternatives {
 	DemandStep demStep;
@@ -129,12 +128,14 @@ dvar interval DemStepAlternative[<<dem,st>,alt> in DemandStepAlternative] //todo
 	optional(1)
 	size ftoi(ceil(alt.fixedProcessingTime + alt.variableProcessingTime * dem.quantity));
 
-	
-dvar sequence resources[res in Resources] in
-	all (dem in Demands,st in Steps, alt in Alternatives
+dvar sequence resources[res in Resources]
+	in all (dem in Demands,st in Steps, alt in Alternatives
 		: res.resourceId == alt.resourceId && st.stepId == alt.stepId 
 		  && dem.productId == item(Steps, ord(Steps, <alt.stepId>)).productId)
-		    DemStepAlternative[<<dem,st>,alt>];
+		    DemStepAlternative[<<dem,st>,alt>]
+	types all(dem in Demands,st in Steps, alt in Alternatives
+		: res.resourceId == alt.resourceId && st.stepId == alt.stepId 
+		  && dem.productId == item(Steps, ord(Steps, <alt.stepId>)).productId) dem.productId; 
 
 
 pwlFunction tardinessFees[dem in Demands] = 
@@ -170,7 +171,7 @@ subject to {
 	forall(<d,st> in DemSteps)
   		alternative(prodSteps[<d,st>], 
   			all(alt in Alternatives: alt.stepId == st.stepId) DemStepAlternative[<<d,st>,alt>]);
-  		
+  	
 	forall(res in Resources)
 	    noOverlap(resources[res], setupTimes[res], 1);
 	    
