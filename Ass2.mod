@@ -95,6 +95,12 @@ tuple CriterionWeight {
 }
 {CriterionWeight} CriterionWeights with criterionId in CritConsts = ...;
 
+//								End of input data
+
+
+
+
+
 tuple DemandStep {
 	Demand demand;
 	Step step;
@@ -104,7 +110,7 @@ tuple DemandStep {
 dvar interval prodSteps[<dem,st> in DemSteps] //todo add "in min .. max" 
 	optional(1);
 
-//todo, some demands have minimum
+//todo, some demands have minimum start 
 dvar interval demand[d in Demands] //todo add "in min .. max"
 	optional(1);
 
@@ -112,7 +118,7 @@ dvar interval demand[d in Demands] //todo add "in min .. max"
 tuple triplet {int prod1; int prod2; int time;}; 
 
 int maxResTime = max(s in Setups) s.setupTime;
-{triplet} setupTimes[res in Resources] = 
+{triplet} setupTimes[res in Resources] = // todo turn this into intervals somehow..
 	{<p1,p2,t> | p1,p2 in ProductIds, stp in Setups, t in 0..maxResTime
 		: stp.fromState == p1 && stp.toState == p2 
 			&& stp.setupMatrixId == res.setupMatrixId && t == stp.setupTime};
@@ -124,19 +130,25 @@ tuple DemandStepAlternatives {
 {DemandStepAlternatives} DemandStepAlternative = 
 	{<<dem,st>,alt> | <dem,st> in DemSteps, alt in Alternatives
 		: st.stepId == item(Steps, ord(Steps, <alt.stepId>)).stepId};
-dvar interval DemStepAlternative[<<dem,st>,alt> in DemandStepAlternative] //todo add "in min .. max"
+dvar interval demandStepAlternative[<<dem,st>,alt> in DemandStepAlternative] //todo add "in min .. max"
 	optional(1)
 	size ftoi(ceil(alt.fixedProcessingTime + alt.variableProcessingTime * dem.quantity));
 
-dvar sequence resources[res in Resources]
-	in all (dem in Demands,st in Steps, alt in Alternatives
+dvar sequence resources[res in Resources] in
+	all (dem in Demands,st in Steps, alt in Alternatives
 		: res.resourceId == alt.resourceId && st.stepId == alt.stepId 
 		  && dem.productId == item(Steps, ord(Steps, <alt.stepId>)).productId)
-		    DemStepAlternative[<<dem,st>,alt>]
+		    demandStepAlternative[<<dem,st>,alt>]
 	types all(dem in Demands,st in Steps, alt in Alternatives
 		: res.resourceId == alt.resourceId && st.stepId == alt.stepId 
 		  && dem.productId == item(Steps, ord(Steps, <alt.stepId>)).productId) dem.productId; 
 
+//dvar sequence storageTanks[stT in StorageTanks]
+//	in all();
+
+//make cumulFunctions with a sum of pulse (interval, quantity)
+
+//todo add constraint alwaysIn for every storageTank. using the cumulFunction
 
 pwlFunction tardinessFees[dem in Demands] = 
 				piecewise{0->dem.due_time; dem.tardinessVariableCost}(dem.due_time, 0);
@@ -146,10 +158,12 @@ dexpr float NonDeliveryCost = sum(dem in Demands)
 		 		(1 - presenceOf(demand[dem])) * (dem.quantity * dem.nonDeliveryVariableCost);
 
 dexpr float ProcessingCost = sum(<<dem,st>,alt> in DemandStepAlternative) 
-								presenceOf(DemStepAlternative[<<dem,st>,alt>])
-								*(alt.fixedProcessingCost + dem.quantity * alt.variableProcessingCost);
+				presenceOf(demandStepAlternative[<<dem,st>,alt>]) // verify !!
+				*(alt.fixedProcessingCost + dem.quantity * alt.variableProcessingCost);
 
 dexpr float SetupCost = 0;
+//dexpr float SetupCost = sum(res in Resources, <<dem,st>,alt> in DemandStepAlternative) 
+//				typeOfNext(resources[res], demandStepAlternative[<<dem,st>,alt>], 0);
 
 dexpr float WeightedTardinessCost = 
 		TardinessCost * item(CriterionWeights, ord(CriterionWeights, <"TardinessCost">)).weight;
@@ -170,10 +184,10 @@ minimize
 subject to {	    
 	forall(<d,st> in DemSteps)
   		alternative(prodSteps[<d,st>], 
-  			all(alt in Alternatives: alt.stepId == st.stepId) DemStepAlternative[<<d,st>,alt>]);
+  			all(alt in Alternatives: alt.stepId == st.stepId) demandStepAlternative[<<d,st>,alt>]);
   	
 	forall(res in Resources)
-	    noOverlap(resources[res], setupTimes[res], 1);
+	    ResNoOverlap: noOverlap(resources[res], setupTimes[res], 1);
 	    
 	forall(<d,st> in DemSteps)
 	  	presenceOf(demand[d]) == presenceOf(prodSteps[<d,st>]);
@@ -185,7 +199,7 @@ subject to {
 	forall(d in Demands)
 	    span(demand[d], all(st in Steps : d.productId == st.productId) prodSteps[<d,st>]);
 	    
-	
+	//use endAtStart !
 }
 
 tuple DemandAssignment {
