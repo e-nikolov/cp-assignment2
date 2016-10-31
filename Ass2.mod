@@ -130,6 +130,7 @@ tuple DemandStepAlternatives {
 {DemandStepAlternatives} DemandStepAlternative = 
 	{<<dem,st>,alt> | <dem,st> in DemSteps, alt in Alternatives
 		: st.stepId == item(Steps, ord(Steps, <alt.stepId>)).stepId};
+	
 dvar interval demandStepAlternative[<<dem,st>,alt> in DemandStepAlternative] //todo add "in min .. max"
 	optional(1)
 	size ftoi(ceil(alt.fixedProcessingTime + alt.variableProcessingTime * dem.quantity));
@@ -142,6 +143,25 @@ dvar sequence resources[res in Resources] in
 	types all(dem in Demands,st in Steps, alt in Alternatives
 		: res.resourceId == alt.resourceId && st.stepId == alt.stepId 
 		  && dem.productId == item(Steps, ord(Steps, <alt.stepId>)).productId) dem.productId; 
+
+dvar int costSetupBeforeStep[<<dem,st>,alt> in DemandStepAlternative];
+
+
+//int wtf[alt in Alternatives]= union(stp in Setups, res in Resources) stp.setupTime;
+//{int} ProductIds = union(p in Products) {p.productId};
+//{int}Fu[alt in Alternatives] = union(stp in Setups, res in Resources: res.resourceId == alt.resourceId && res.setupMatrixId == stp.setupMatrixId) {stp.setupTime};
+//dvar int fu[alt in Alternatives][f in Fu[alt]] = 0; 
+//range setupBeforeStepTime[<<dem,st>,alt> in DemandStepAlternative] = //todo might not be necessary to have dem and st. alt/res should be enough 
+//		min(f in Fu[alt]) fu[alt][f]
+//		..
+//		max(res in Resources, p1,p2 in ProductIds: res.resourceId == alt.resourceId) item(Setups, ord(Setups, <res.setupMatrixId, p1,p2>)).setupTime;
+
+dvar interval setupBeforeStep[<<dem,st>,alt> in DemandStepAlternative]
+	optional(1) //presence of the demandStepAlternative == presence of the setupBeforeStep!!!
+	size 0..2;//min(stp in Setups) stp.setupTime .. max(stp in Setups) stp.setupTime;
+
+//dvar sequence setupResources[sRes in SetupResources] in //this is for the setups on steps
+//	all (smth in smth : some condition) smthElse
 
 //dvar sequence storageTanks[stT in StorageTanks]
 //	in all();
@@ -181,7 +201,20 @@ execute {
 }
 minimize 
   WeightedTardinessCost + WeightedNonDeliveryCost + WeightedProcessingCost + WeightedSetupCost;
-subject to {	    
+subject to {	
+	forall(<<dem,st>,alt> in DemandStepAlternative, res in Resources : res.setupMatrixId != "NULL" && res.resourceId == alt.resourceId) {
+//		presenceOf(setupBeforeStep[<<dem,st>,alt>]) == presenceOf(demandStepAlternative[<<dem,st>,alt>]);
+//	  	sizeOf(setupBeforeStep[<<dem,st>,alt>]) 
+//	  	 	== item(Setups, ord(Setups, <res.setupMatrixId, 0,0>)).setupTime;
+	  	costSetupBeforeStep[<<dem,st>,alt>] 
+	  		== item(Setups, ord(Setups, <res.setupMatrixId, 0,0>)).setupCost;;
+  	}
+  	forall(<<dem,st>,alt> in DemandStepAlternative, res in Resources 
+  	  : res.setupMatrixId == "NULL" && res.resourceId == alt.resourceId) {
+  	  	!presenceOf(setupBeforeStep[<<dem,st>,alt>]);
+	  	costSetupBeforeStep[<<dem,st>,alt>] == 0;
+  	}
+  	    
 	forall(<d,st> in DemSteps)
   		alternative(prodSteps[<d,st>], 
   			all(alt in Alternatives: alt.stepId == st.stepId) demandStepAlternative[<<d,st>,alt>]);
@@ -198,17 +231,11 @@ subject to {
 	
 	forall(d in Demands)
 	    span(demand[d], all(st in Steps : d.productId == st.productId) prodSteps[<d,st>]);
-	    
-	//use endAtStart !
-}
+	
+	//use endAtStart for storage!
+	
 
-tuple DemandAssignment {
-	key string demandId;
-	int startTime;
-	int endTime;
-	float nonDeliveryCost;
-	float tardinessCost;
-};
+ };	  	
 //{DemandAssignment} demandAssignments = fill in from your decision variables.
 //{DemandAssignment} demandAssignments =
 //{
