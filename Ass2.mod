@@ -144,25 +144,36 @@ dvar sequence resources[res in Resources] in
 		: res.resourceId == alt.resourceId && st.stepId == alt.stepId 
 		  && dem.productId == item(Steps, ord(Steps, <alt.stepId>)).productId) dem.productId; 
 
-dvar int costSetupBeforeStep[<<dem,st>,alt> in DemandStepAlternative];
+//                 Setups
+{string} setupMatrixIDs = union(s in Setups) {s.setupMatrixId}; //{"SMX_CLEAN", "SMX_PROCESS", "SMX_STORAGE"};//
+tuple ProductSetsInMatrix {
+	int p1;
+	int p2;
+}
+{ProductSetsInMatrix} productSetsInMatrix[s in setupMatrixIDs] = {<stp.fromState, stp.toState> | stp in Setups: stp.setupMatrixId == s};
 
+{int} setupTimesPerStep[st in Steps] = {neshtosi | res in Resources, ... sega go dopisvam toq variqnt};
 
-//int wtf[alt in Alternatives]= union(stp in Setups, res in Resources) stp.setupTime;
-//{int} ProductIds = union(p in Products) {p.productId};
-//{int}Fu[alt in Alternatives] = union(stp in Setups, res in Resources: res.resourceId == alt.resourceId && res.setupMatrixId == stp.setupMatrixId) {stp.setupTime};
-//dvar int fu[alt in Alternatives][f in Fu[alt]] = 0; 
-//range setupBeforeStepTime[<<dem,st>,alt> in DemandStepAlternative] = //todo might not be necessary to have dem and st. alt/res should be enough 
-//		min(f in Fu[alt]) fu[alt][f]
-//		..
-//		max(res in Resources, p1,p2 in ProductIds: res.resourceId == alt.resourceId) item(Setups, ord(Setups, <res.setupMatrixId, p1,p2>)).setupTime;
+dvar interval setupDemandStepAlternative[<<dem,st>,alt> in DemandStepAlternative]
+	optional(1) //todo the 0 in the below range might be the min of the same thing.
+	size min(t in setupTimesPerStep[st]) t .. max(t in setupTimesPerStep[st]) t;
+	
+//	size 0..(max(res in Resources, <p1,p2> in productSetsInMatrix[res.setupMatrixId],
+//			stp in Setups: res.resourceId == alt.resourceId && stp.setupMatrixId == res.setupMatrixId &&
+//			stp.fromState == p1 && stp.toState == p2) 
+//			stp.setupCost);
+//	size 0..max(res in Resources, <p1,p2> in productSetsInMatrix[res.setupMatrixId]
+//				: res.resourceId == alt.resourceId) 
+//				item(Setups, ord(Setups, <res.setupMatrixId, p1,p2>)).setupTime; //maybe calculate it better?
 
-dvar interval setupBeforeStep[<<dem,st>,alt> in DemandStepAlternative]
-	optional(1) //presence of the demandStepAlternative == presence of the setupBeforeStep!!!
-	size 0..2;//min(stp in Setups) stp.setupTime .. max(stp in Setups) stp.setupTime;
+int costSetupDemandeStepAlternative[<<dem,st>,alt> in DemandStepAlternative]
+	= dem.quantity; //todo actually calculate it 
 
 //dvar sequence setupResources[sRes in SetupResources] in //this is for the setups on steps
 //	all (smth in smth : some condition) smthElse
 
+
+//                  Storage tanks here
 //dvar sequence storageTanks[stT in StorageTanks]
 //	in all();
 
@@ -198,22 +209,26 @@ dexpr float WeightedSetupCost =
 execute {
 	cp.param.Workers = 1;
 	cp.param.TimeLimit = 30;
+	
+	for(var s in setupMatrixIDs) 
+	{
+		writeln("smth ", productSetsInMatrix[s]);
+	}
 }
 minimize 
   WeightedTardinessCost + WeightedNonDeliveryCost + WeightedProcessingCost + WeightedSetupCost;
 subject to {	
-	forall(<<dem,st>,alt> in DemandStepAlternative, res in Resources : res.setupMatrixId != "NULL" && res.resourceId == alt.resourceId) {
-//		presenceOf(setupBeforeStep[<<dem,st>,alt>]) == presenceOf(demandStepAlternative[<<dem,st>,alt>]);
-//	  	sizeOf(setupBeforeStep[<<dem,st>,alt>]) 
-//	  	 	== item(Setups, ord(Setups, <res.setupMatrixId, 0,0>)).setupTime;
-	  	costSetupBeforeStep[<<dem,st>,alt>] 
-	  		== item(Setups, ord(Setups, <res.setupMatrixId, 0,0>)).setupCost;;
-  	}
   	forall(<<dem,st>,alt> in DemandStepAlternative, res in Resources 
   	  : res.setupMatrixId == "NULL" && res.resourceId == alt.resourceId) {
-  	  	!presenceOf(setupBeforeStep[<<dem,st>,alt>]);
-	  	costSetupBeforeStep[<<dem,st>,alt>] == 0;
+  	  	!presenceOf(setupDemandStepAlternative[<<dem,st>,alt>]);
   	}
+//	forall(<<dem,st>,alt> in DemandStepAlternative, res in Resources : res.setupMatrixId != "NULL" && res.resourceId == alt.resourceId) {
+//		lengthOf(setupDemandStepAlternative[<<dem,st>,alt>]) = depending on the dem.prodID and typeOfPrev(resources[res], demandStepAlternative[<<d,st>,alt>])
+
+//		Or use a set of alternative intervals for each demStepAlt depending on the type of prev in resources[res] and make only the presenceOf the correct one True
+
+//		presenceOf(setupDemandStepAlternative[<<dem,st>,alt>]) == presenceOf(demandStepAlternative[<<dem,st>,alt>]);
+//  } Not entirely true.. if there 
   	    
 	forall(<d,st> in DemSteps)
   		alternative(prodSteps[<d,st>], 
