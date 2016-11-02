@@ -111,14 +111,14 @@ dvar interval prodSteps[<dem,st> in DemSteps] //todo add "in min .. max"
 	optional(1);
 
 //todo, some demands have minimum start 
-dvar interval demand[d in Demands] //todo add "in min .. max"
+dvar interval demand[d in Demands] //todo add "in min .. max" !!!!!!!!!!!!!!!!!!!!!! maybe no max.
 	optional(1);
 
 {int} ProductIds = union(p in Products) {p.productId};
 tuple triplet {
 	key int prod1; 
 	key int prod2; 
-	int time;
+	int value;
 }; 
 
 int maxResTime = max(s in Setups) s.setupTime;
@@ -127,6 +127,21 @@ int maxResTime = max(s in Setups) s.setupTime;
 		: stp.fromState == p1 && stp.toState == p2 
 			&& stp.setupMatrixId == res.setupMatrixId && t == stp.setupTime};
 
+{triplet} setupCosts[res in Resources] = // todo turn this into intervals somehow..
+	{<p1,p2,c> | p1,p2 in ProductIds, stp in Setups, c in 0..maxint
+		: stp.fromState == p1 && stp.toState == p2 
+			&& stp.setupMatrixId == res.setupMatrixId && c == stp.setupCost};
+//{triplet} setupTimesMissing[res in Resources] = // todo create the zeroes and unite this with 
+//	{<p1,p2,0> | p1,p2 in ProductIds, stp in Setups // the above setupTimes?
+//		: (stp.fromState != p1 || stp.toState != p2) 
+//			&& stp.setupMatrixId == res.setupMatrixId};
+
+
+range resRange = 0..max(res in Resources) res.resourceNr;
+range prodRange = 0..max(p in ProductIds) p;
+//int stpTimes[res in Resources][p1 in ProductIds][p2 in ProductIds] = [
+int stpTimes[resRange][prodRange][prodRange] = [ r : [ p1 : [ p2: 0]] | r in resRange, p1,p2 in prodRange ];
+int stpCosts[resRange][prodRange][prodRange] = [ r : [ p1 : [ p2: 0]] | r in resRange, p1,p2 in prodRange ];
 
 tuple DemandStepAlternatives {
 	DemandStep demStep;
@@ -167,7 +182,6 @@ dvar interval setupDemandStepAlternative[<<dem,st>,alt> in DemandStepAlternative
 				: res.resourceId == alt.resourceId && res.setupMatrixId != "NULL") 
 				item(Setups, ord(Setups, <res.setupMatrixId, p1,p2>)).setupTime, 0); //maybe calculate it better?
 
-dvar int bs[<<dem,st>,alt> in DemandStepAlternative];
 dvar int costSetupDemandeStepAlternative[<<dem,st>,alt> in DemandStepAlternative]; 
 
 //dvar sequence setupResources[sRes in SetupResources] in //this is for the setups on steps
@@ -193,9 +207,11 @@ dexpr float ProcessingCost = sum(<<dem,st>,alt> in DemandStepAlternative)
 				presenceOf(demandStepAlternative[<<dem,st>,alt>]) // verify !!
 				*(alt.fixedProcessingCost + dem.quantity * alt.variableProcessingCost);
 
-dexpr float SetupCost = 0;
-//dexpr float SetupCost = sum(res in Resources, <<dem,st>,alt> in DemandStepAlternative) 
-//				typeOfNext(resources[res], demandStepAlternative[<<dem,st>,alt>], 0);
+//dexpr float SetupCost = 0; 
+dexpr float SetupCost = sum(<<dem,st>,alt> in DemandStepAlternative)
+				presenceOf(demandStepAlternative[<<dem,st>,alt>]) // verify !!
+				* costSetupDemandeStepAlternative[<<dem,st>,alt>];
+				//todo the cost of Storage settup needs to be added too !!!
 
 dexpr float WeightedTardinessCost = 
 		TardinessCost * item(CriterionWeights, ord(CriterionWeights, <"TardinessCost">)).weight;
@@ -208,17 +224,22 @@ dexpr float WeightedSetupCost =
 
 dexpr float TotalCost = WeightedTardinessCost + WeightedNonDeliveryCost + WeightedProcessingCost + WeightedSetupCost;
 
-dvar int p1[<<dem,st>,alt> in DemandStepAlternative];
-dvar int p2[<<dem,st>,alt> in DemandStepAlternative];
-
 execute {
-	cp.param.Workers = 1;
+//	cp.param.Workers = 1;
 	cp.param.TimeLimit = 10;
 	
-	for(var s in setupMatrixIDs) 
-	{
-		writeln("smth ", productSetsInMatrix[s]);
-	}
+	for(var res in Resources)
+		for(var t in setupTimes[res])
+			stpTimes[Opl.ord(Resources, res)][t.prod1][t.prod2] = t.value;
+			
+	for(var res in Resources)
+		for(var c in setupCosts[res])
+			stpCosts[Opl.ord(Resources, res)][c.prod1][c.prod2]	= c.value;
+//			stpCosts[Opl.ord(Resources, res)][c.prod1][c.prod2]	= Opl.item(Setups, Opl.ord(Setups, <res.setupMatrixId, c.prod1, c.prod2>)).setupCost;
+//			stpCosts[Opl.ord(Resources, res)][c.prod1][c.prod2]	= Opl.item(Setups, Opl.ord(Setups, <"SMX_FERMENT", 0, 0>)).setupCost;
+
+//	writeln(stpCosts);
+//	writeln(stpTimes);
 }
 minimize 
   TotalCost;
@@ -233,20 +254,28 @@ subject to {
 			: res.setupMatrixId != "NULL" && res.resourceId == alt.resourceId) {
 		//depending on the dem.prodID and typeOfPrev(resources[res], demandStepAlternative[<<d,st>,alt>])	
 		SetupTimeValid: lengthOf(setupDemandStepAlternative[<<dem,st>,alt>]) 
-//			== item(setupTimes[res], ord(setupTimes[res], <typeOfPrev(resources[res], demandStepAlternative[<<dem,st>,alt>], res.initialProductId), dem.productId>)).time;
-//			== item(setupTimes[res], ord(setupTimes[res], <0, dem.productId>)).time; //OVER HERE
-//			== item(setupTimes[res], ord(setupTimes[res], <0, 0>)).time; 
+//			== item(setupTimes[res], ord(setupTimes[res], <typeOfPrev(resources[res], demandStepAlternative[<<dem,st>,alt>], res.initialProductId), dem.productId>)).value;
+//			== item(setupTimes[res], ord(setupTimes[res], <0, dem.productId>)).value; //OVER HERE
+//			== item(setupTimes[res], ord(setupTimes[res], <0, 0>)).value; 
+//			== dem.productId
 //			== typeOfPrev(resources[res], demandStepAlternative[<<dem,st>,alt>], res.initialProductId);
-			== 0;
-//		p1[<<dem,st>,alt>] == typeOfPrev(resources[res], demandStepAlternative[<<dem,st>,alt>], res.initialProductId);
-//		p2[<<dem,st>,alt>] == dem.productId;
+//			== 0;
+			== stpTimes[ord(Resources, res)][typeOfPrev(resources[res], demandStepAlternative[<<dem,st>,alt>], res.initialProductId)][dem.productId];
+
 //		Or use a set of alternative intervals for each demStepAlt depending on the type of prev in resources[res] and make only the presenceOf the correct one True
+
+		costSetupDemandeStepAlternative[<<dem,st>,alt>]
+			== stpCosts[ord(Resources, res)][typeOfPrev(resources[res], demandStepAlternative[<<dem,st>,alt>], res.initialProductId)][dem.productId];
   	}
+//  	forall(<<dem,st>,alt> in DemandStepAlternative, res in Resources 
+//			: !(res.setupMatrixId != "NULL" && res.resourceId == alt.resourceId)) { //todo fix this forall. It's not doing what it's supposed to	
+//		SetupTimeInvalid: lengthOf(setupDemandStepAlternative[<<dem,st>,alt>]) == 0;
+//		costSetupDemandeStepAlternative[<<dem,st>,alt>] == 0; 
+//  	}
   	forall(<<dem,st>,alt> in DemandStepAlternative, res in Resources 
-			: !(res.setupMatrixId != "NULL" && res.resourceId == alt.resourceId)) {	
-		SetupTimeInvalid: lengthOf(setupDemandStepAlternative[<<dem,st>,alt>]) == 0; 
-//		p1[<<dem,st>,alt>] == -10;
-//		p2[<<dem,st>,alt>] == -10; 
+			: (res.setupMatrixId == "NULL" && res.resourceId == alt.resourceId)) { //todo fix this forall. It's not doing what it's supposed to	
+		SetupTimeInvalid: lengthOf(setupDemandStepAlternative[<<dem,st>,alt>]) == 0;
+		costSetupDemandeStepAlternative[<<dem,st>,alt>] == 0; 
   	}
   	
   	forall(<<dem,st>,alt> in DemandStepAlternative)
@@ -269,7 +298,9 @@ subject to {
 	forall(d in Demands)
 	    span(demand[d], all(st in Steps : d.productId == st.productId) prodSteps[<d,st>]);
 	
-	//use endAtStart for storage!
+	//todo use endAtStart for storage!
+	
+	//todo if the 
 	
 
  };	  	
