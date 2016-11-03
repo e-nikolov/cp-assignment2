@@ -209,17 +209,28 @@ tuple minMaxStorageTimes {
 						  {<st2, 0, 0> | st2 in startingStepsIDs : st2 == st};
 
 dvar interval storageBeforeProdStep[<dem,st> in DemSteps]
-//	optional(1) //todo try it with non-optional .. the size is already set to 0 when uneeded.
+	optional(1)
 	in dem.deliveryMin..dem.deliveryMax
-//	size 0..maxStoreTime[dem];
 	size item(minMaxStepStorageTime[st.stepId], <st.stepId>).minTime 
 		 .. 
 		 minl(item(minMaxStepStorageTime[st.stepId], <st.stepId>).maxTime, maxStoreTime[dem]);
 	
-//dvar sequence storageTanks[stT in StorageTanks]
-//	in all(dem in Demands, st in Steps, stPrd in StorageProductions
-//		: stPrd.storageTankId == stT.storageTankId && stPrd.consStepId == st.stepId) 
-//			storageBeforeProdStep[<dem,st>]; lol that was unnescessary
+dvar sequence storageTanks[stT in StorageTanks][p in ProductIds] //todo NOT AT ALL
+	in all(dem in Demands, st in Steps, stPrd in StorageProductions : dem.productId == p && 
+		 stPrd.storageTankId == stT.storageTankId && stPrd.consStepId == st.stepId) 
+			storageBeforeProdStep[<dem,st>]; // this is not functional DELETEITLATER
+
+tuple StorageSet {
+	DemandStep demStep1;
+	DemandStep demStep2;
+}
+{StorageSet} StorageSets = { <<dem1,st1>, <dem2,st2>> 
+//todo every combination of storage tank interval with every other storage tank interaval on the same storage tank with a different product in it
+		| <dem1,st1> in DemSteps, <dem2,st2> in DemSteps, stPrd in StorageProductions 
+		: <dem1,st1> != <dem2,st2>}; // HOLY FUCK HOW
+
+dvar sequence someshit[<dst1, dst2> in StorageSets]
+		in all(dst in DemSteps : dst == dst1 || dst == dst2) storageBeforeProdStep[dst];
 
 cumulFunction tankCapOverTime[stT in StorageTanks] 
 		= sum(<dem,st> in DemSteps, stPrd in StorageProductions : stPrd.storageTankId == stT.storageTankId && stPrd.consStepId == st.stepId)
@@ -261,7 +272,7 @@ execute {
 	cp.param.Workers = 1;
 	cp.param.TimeLimit = Opl.card(Demands);
 	
-	writeln(startingStepsIDs);
+	writeln(someshit);
 	for(var res in Resources)
 		for(var t in setupTimes[res])
 			stpTimes[Opl.ord(Resources, res)][t.prod1][t.prod2] = t.value;
@@ -288,7 +299,7 @@ subject to {
   	forall(<dem,st> in DemSteps : st.stepId in startingStepsIDs){
   	    startOf(storageBeforeProdStep[<dem,st>]) == 0;
 		//lengthOf(storageBeforeProdStep[<dem,st>]) == 0; //unnecessary as the size is set to 0..0 by definition for those steps
-  	    //!presenceOf(storageBeforeProdStep[<dem,st>]); ?? //todo test if there is a difference
+  	    !presenceOf(storageBeforeProdStep[<dem,st>]);
  	}
  	
   	// All setup intervals are just before the interval they precede
@@ -316,6 +327,11 @@ subject to {
 	forall(res in Resources)
 	    ResNoOverlap: noOverlap(resources[res], setupTimes[res], 1);
 	
+	// tank intervals with different products and same tank should not overlap
+	//todo add setup time for the tanks!
+	forall(<dst1, dst2> in StorageSets)
+		noOverlap(someshit[<dst1, dst2>]);
+		
 	// setting the setup time and cost of setups before each step. 
 	forall(<<dem,st>,alt> in DemandStepAlternative, res in Resources 
 					: res.setupMatrixId != "NULL" && res.resourceId == alt.resourceId) {	
