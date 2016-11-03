@@ -188,22 +188,44 @@ dvar int costSetupDemandeStepAlternative[<<dem,st>,alt> in DemandStepAlternative
 
 //                   Storage tanks
 
+// get the stepID's of steps that are first. The storage before these steps will be 0 0 0.
+{string} stepIDs = union(st in Steps) {st.stepId};
+{string} stepsWithPredecessorIDs = union(pr in Precedences) {pr.successorId};
+{string} startingStepsIDs = stepIDs diff stepsWithPredecessorIDs;
+ 
 //todo this calculation can be better. The sum of the minimum quantit 
 int maxStoreTime[dem in Demands] = dem.deliveryMax - dem.deliveryMin;
 //		- sum(st in Steps) min(alt in Alternatives) where st.productId == dem.productId && alt.stepId == st.stepId;
 
+tuple minMaxStorageTimes {
+	key string stepId;
+	int minTime;
+	int maxTime;
+}
+
+{minMaxStorageTimes} minMaxStepStorageTime[st in stepIDs]
+						= {<st, pr.delayMin, pr.delayMax> | pr in Precedences : pr.successorId == st}
+						  union 
+						  {<st2, 0, 0> | st2 in startingStepsIDs : st2 == st};
+
 dvar interval storageBeforeProdStep[<dem,st> in DemSteps]
-	optional(1) //todo try it with (0) .. the size is already set to 0 when uneeded.
+//	optional(1) //todo try it with non-optional .. the size is already set to 0 when uneeded.
 	in dem.deliveryMin..dem.deliveryMax
-	size 0;//0..maxStoreTime[dem];
+//	size 0..maxStoreTime[dem];
+	size item(minMaxStepStorageTime[st.stepId], <st.stepId>).minTime 
+		 .. 
+		 minl(item(minMaxStepStorageTime[st.stepId], <st.stepId>).maxTime, maxStoreTime[dem]);
 	
 //dvar sequence storageTanks[stT in StorageTanks]
-//	in all();
+//	in all(dem in Demands, st in Steps, stPrd in StorageProductions
+//		: stPrd.storageTankId == stT.storageTankId && stPrd.consStepId == st.stepId) 
+//			storageBeforeProdStep[<dem,st>]; lol that was unnescessary
 
-//make cumulFunctions with a sum of pulse (interval, quantity)
+cumulFunction tankCapOverTime[stT in StorageTanks] 
+		= sum(<dem,st> in DemSteps, stPrd in StorageProductions : stPrd.storageTankId == stT.storageTankId && stPrd.consStepId == st.stepId)
+			pulse(storageBeforeProdStep[<dem,st>], dem.quantity);
 
-//todo add constraint alwaysIn for every storageTank. using the cumulFunction
-
+//todo setup costs for the storage need to be added too..
 
 //                       COSTS
 
@@ -239,6 +261,7 @@ execute {
 	cp.param.Workers = 1;
 	cp.param.TimeLimit = Opl.card(Demands);
 	
+	writeln(startingStepsIDs);
 	for(var res in Resources)
 		for(var t in setupTimes[res])
 			stpTimes[Opl.ord(Resources, res)][t.prod1][t.prod2] = t.value;
@@ -251,7 +274,7 @@ execute {
 minimize 
   TotalCost;
 subject to {
-	// Making sure the unimportnat intervals are not cousing any delay
+	// Making sure the unimportnat intervals are not cousing any useless test cases
   	forall(<<dem,st>,alt> in DemandStepAlternative, res in Resources 
 			: res.setupMatrixId == "NULL" && res.resourceId == alt.resourceId) {
 						
@@ -259,19 +282,26 @@ subject to {
 		lengthOf(setupDemandStepAlternative[<<dem,st>,alt>]) == 0;
 		costSetupDemandeStepAlternative[<<dem,st>,alt>] == 0; 
   	}
-  	
+
   	//todo set the size of all storage intervals of before first steps to 0!
   	//todo also set their start/end times to 0
-  	
+  	forall(<dem,st> in DemSteps : st.stepId in startingStepsIDs){
+  	    startOf(storageBeforeProdStep[<dem,st>]) == 0;
+		//lengthOf(storageBeforeProdStep[<dem,st>]) == 0; //unnecessary as the size is set to 0..0 by definition for those steps
+  	    //!presenceOf(storageBeforeProdStep[<dem,st>]); ?? //todo test if there is a difference
+ 	}
+ 	
   	// All setup intervals are just before the interval they precede
   	forall(<<dem,st>,alt> in DemandStepAlternative)
   		endAtStart(setupDemandStepAlternative[<<dem,st>,alt>], demandStepAlternative[<<dem,st>,alt>]);
   	
   	//fix the position of all storage intervals (their end times and start times) //todo Actually do it
-//  	forall(<dem,st> in DemSteps) {// todo DONT use this. use a list of all StorageProductions somehow
+  	forall(<dem,st> in DemSteps : st.stepId in stepsWithPredecessorIDs){
+  	  	startOf(storageBeforeProdStep[<dem,st>]) == 1;
+  	  	endOf(storageBeforeProdStep[<dem,st>]) == 3;
 //  		endAtStart(storageBeforeProdStep[<dem,st>], prodSteps[<dem,st>]) or smth
 //  		startAtEnd(storageBeforeProdStep[<dem,st>], prodSteps[<dem,st>]) or smth
-//    }  	
+    }  	
 	
   	// If a demand is present, all the steps it requires must be present too (and vice versa)
   	forall(<dem,st> in DemSteps)
@@ -309,7 +339,9 @@ subject to {
 	forall(dem in Demands)
 	    span(demand[dem], all(st in Steps : dem.productId == st.productId) prodSteps[<dem,st>]);
 	
-	//todo use endAtStart for storage!
+	//todo add constraint that the cumulFucntion's are <= the cap of the storageTank
+	forall(stT in StorageTanks)
+	    tankCapOverTime[stT] <= stT.quantityMax;
 	
 	//todo if the ..{ I wonder what I was going to write here if the IDE hadn't crashed before finishing this line }
  };	  	
