@@ -220,6 +220,8 @@ dvar sequence storageTanks[stT in StorageTanks][p in ProductIds] //todo NOT AT A
 		 stPrd.storageTankId == stT.storageTankId && stPrd.consStepId == st.stepId) 
 			storageBeforeProdStep[<dem,st>]; // this is not functional DELETEITLATER
 
+string TankOfStep[<dem1,st1> in DemSteps] = God knows what;
+
 tuple StorageSet {
 	DemandStep demStep1;
 	DemandStep demStep2;
@@ -227,7 +229,9 @@ tuple StorageSet {
 {StorageSet} StorageSets = { <<dem1,st1>, <dem2,st2>> 
 //todo every combination of storage tank interval with every other storage tank interaval on the same storage tank with a different product in it
 		| <dem1,st1> in DemSteps, <dem2,st2> in DemSteps, stPrd in StorageProductions 
-		: <dem1,st1> != <dem2,st2>}; // HOLY FUCK HOW
+		: <dem1,st1> != <dem2,st2> // not the same DemStep 
+			&& TankOfStep[<dem1,st1>] == TankOfStep[<dem2,st2>] // both DemStep's use the same tank
+			&& dem1.productId != dem2.productId}; // the two DemStep's have different products
 
 dvar sequence someshit[<dst1, dst2> in StorageSets]
 		in all(dst in DemSteps : dst == dst1 || dst == dst2) storageBeforeProdStep[dst];
