@@ -146,7 +146,7 @@ tuple DemandStepAlternatives {
 }
 {DemandStepAlternatives} DemandStepAlternative = 
 	{<<dem,st>,alt> | <dem,st> in DemSteps, alt in Alternatives
-		: st.stepId == item(Steps, ord(Steps, <alt.stepId>)).stepId};
+		: st.stepId == item(Steps, <alt.stepId>).stepId};
 	
 dvar interval demandStepAlternative[<<dem,st>,alt> in DemandStepAlternative]
 	optional(1)
@@ -156,11 +156,11 @@ dvar interval demandStepAlternative[<<dem,st>,alt> in DemandStepAlternative]
 dvar sequence resources[res in Resources] in
 	all (dem in Demands, st in Steps, alt in Alternatives
 		: res.resourceId == alt.resourceId && st.stepId == alt.stepId 
-		  && dem.productId == item(Steps, ord(Steps, <alt.stepId>)).productId)
+		  && dem.productId == item(Steps, <alt.stepId>).productId)
 		    demandStepAlternative[<<dem,st>,alt>]
 	types all(dem in Demands,st in Steps, alt in Alternatives
 		: res.resourceId == alt.resourceId && st.stepId == alt.stepId 
-		  && dem.productId == item(Steps, ord(Steps, <alt.stepId>)).productId) dem.productId; 
+		  && dem.productId == item(Steps, <alt.stepId>).productId) dem.productId; 
 
 //                 Setups
 {string} setupMatrixIDsNoNull = union(s in Setups) {s.setupMatrixId};
@@ -173,20 +173,30 @@ tuple ProductSetsInMatrix {
 						= {<stp.fromState, stp.toState> | stp in Setups: stp.setupMatrixId == s};
 
 dvar interval setupDemandStepAlternative[<<dem,st>,alt> in DemandStepAlternative]
-	optional(1)
+	optional(1) //todo try it with (0) .. the size is already set to 0 when uneeded.
 	size 0..maxl(max(res in Resources, <p1,p2> in productSetsInMatrix[res.setupMatrixId]
 				: res.resourceId == alt.resourceId && res.setupMatrixId != "NULL") 
-				item(Setups, ord(Setups, <res.setupMatrixId, p1,p2>)).setupTime, 0); //maybe calculate it better?
+				item(Setups, <res.setupMatrixId, p1,p2>).setupTime, 0); //maybe calculate it better?
 
 dvar sequence setupResources[setRes in SetupResources] in
 	all (dem in Demands, st in Steps, alt in Alternatives
 		: setRes.setupResourceId == st.setupResourceId && st.stepId == alt.stepId 
-		  && dem.productId == item(Steps, ord(Steps, <alt.stepId>)).productId)
+		  && dem.productId == item(Steps, <alt.stepId>).productId)
 		    setupDemandStepAlternative[<<dem,st>,alt>];
 
 dvar int costSetupDemandeStepAlternative[<<dem,st>,alt> in DemandStepAlternative]; 
 
 //                   Storage tanks
+
+//todo this calculation can be better. The sum of the minimum quantit 
+int maxStoreTime[dem in Demands] = dem.deliveryMax - dem.deliveryMin;
+//		- sum(st in Steps) min(alt in Alternatives) where st.productId == dem.productId && alt.stepId == st.stepId;
+
+dvar interval storageBeforeProdStep[<dem,st> in DemSteps]
+	optional(1) //todo try it with (0) .. the size is already set to 0 when uneeded.
+	in dem.deliveryMin..dem.deliveryMax
+	size 0;//0..maxStoreTime[dem];
+	
 //dvar sequence storageTanks[stT in StorageTanks]
 //	in all();
 
@@ -215,13 +225,13 @@ dexpr float SetupCost = sum(<<dem,st>,alt> in DemandStepAlternative)
 				//todo the cost of Storage settup needs to be added too !!!
 
 dexpr float WeightedTardinessCost = 
-		TardinessCost * item(CriterionWeights, ord(CriterionWeights, <"TardinessCost">)).weight;
+		TardinessCost * item(CriterionWeights, <"TardinessCost">).weight;
 dexpr float WeightedNonDeliveryCost = 
-		NonDeliveryCost * item(CriterionWeights, ord(CriterionWeights, <"NonDeliveryCost">)).weight;
+		NonDeliveryCost * item(CriterionWeights, <"NonDeliveryCost">).weight;
 dexpr float WeightedProcessingCost =
-		ProcessingCost * item(CriterionWeights, ord(CriterionWeights, <"ProcessingCost">)).weight;
+		ProcessingCost * item(CriterionWeights, <"ProcessingCost">).weight;
 dexpr float WeightedSetupCost = 
-		SetupCost * item(CriterionWeights, ord(CriterionWeights, <"SetupCost">)).weight;
+		SetupCost * item(CriterionWeights, <"SetupCost">).weight;
 
 dexpr float TotalCost = WeightedTardinessCost + WeightedNonDeliveryCost + WeightedProcessingCost + WeightedSetupCost;
 
@@ -250,18 +260,27 @@ subject to {
 		costSetupDemandeStepAlternative[<<dem,st>,alt>] == 0; 
   	}
   	
+  	//todo set the size of all storage intervals of before first steps to 0!
+  	//todo also set their start/end times to 0
+  	
   	// All setup intervals are just before the interval they precede
   	forall(<<dem,st>,alt> in DemandStepAlternative)
   		endAtStart(setupDemandStepAlternative[<<dem,st>,alt>], demandStepAlternative[<<dem,st>,alt>]);
   	
+  	//fix the position of all storage intervals (their end times and start times) //todo Actually do it
+//  	forall(<dem,st> in DemSteps) {// todo DONT use this. use a list of all StorageProductions somehow
+//  		endAtStart(storageBeforeProdStep[<dem,st>], prodSteps[<dem,st>]) or smth
+//  		startAtEnd(storageBeforeProdStep[<dem,st>], prodSteps[<dem,st>]) or smth
+//    }  	
+	
   	// If a demand is present, all the steps it requires must be present too (and vice versa)
-  	forall(<d,st> in DemSteps)
-	  	presenceOf(demand[d]) == presenceOf(prodSteps[<d,st>]);
+  	forall(<dem,st> in DemSteps)
+	  	presenceOf(demand[dem]) == presenceOf(prodSteps[<dem,st>]);
   	    
   	// Every step must be one and only one of it's alternatives 
-	forall(<d,st> in DemSteps)
-  		alternative(prodSteps[<d,st>], 
-  			all(alt in Alternatives: alt.stepId == st.stepId) demandStepAlternative[<<d,st>,alt>]);
+	forall(<dem,st> in DemSteps)
+  		alternative(prodSteps[<dem,st>], 
+  			all(alt in Alternatives: alt.stepId == st.stepId) demandStepAlternative[<<dem,st>,alt>]);
   	
   	// steps using the same resource must not overlap
 	forall(res in Resources)
@@ -287,8 +306,8 @@ subject to {
 		endBeforeStart(prodSteps[<d1,st1>], prodSteps[<d2,st2>]);
   	
   	// the steps on a product of a demand should be spanned in the demand interval
-	forall(d in Demands)
-	    span(demand[d], all(st in Steps : d.productId == st.productId) prodSteps[<d,st>]);
+	forall(dem in Demands)
+	    span(demand[dem], all(st in Steps : dem.productId == st.productId) prodSteps[<dem,st>]);
 	
 	//todo use endAtStart for storage!
 	
