@@ -107,14 +107,15 @@ tuple DemandStep {
 }
 {DemandStep} DemSteps = {<d,st> | d in Demands, st in Steps : d.productId == st.productId};
 
-dvar interval prodSteps[<dem,st> in DemSteps] //todo add "in min .. max" 
-	optional(1);
+dvar interval prodSteps[<dem,st> in DemSteps] // size is taken from alternatives.
+	optional;
 
-//todo, some demands have minimum start 
-dvar interval demand[d in Demands] //todo add "in min .. max" !!!!!!!!!!!!!!!!!!!!!! maybe no max.
-	optional(1);
+dvar interval demand[d in Demands]
+	optional
+	in d.deliveryMin..d.deliveryMax;
 
 {int} ProductIds = union(p in Products) {p.productId};
+
 tuple triplet {
 	key int prod1; 
 	key int prod2; 
@@ -122,24 +123,20 @@ tuple triplet {
 }; 
 
 int maxResTime = max(s in Setups) s.setupTime;
-{triplet} setupTimes[res in Resources] = // todo turn this into intervals somehow..
+{triplet} setupTimes[res in Resources] =
 	{<p1,p2,t> | p1,p2 in ProductIds, stp in Setups, t in 0..maxResTime
 		: stp.fromState == p1 && stp.toState == p2 
 			&& stp.setupMatrixId == res.setupMatrixId && t == stp.setupTime};
 
-{triplet} setupCosts[res in Resources] = // todo turn this into intervals somehow..
+{triplet} setupCosts[res in Resources] =
 	{<p1,p2,c> | p1,p2 in ProductIds, stp in Setups, c in 0..maxint
 		: stp.fromState == p1 && stp.toState == p2 
 			&& stp.setupMatrixId == res.setupMatrixId && c == stp.setupCost};
-//{triplet} setupTimesMissing[res in Resources] = // todo create the zeroes and unite this with 
-//	{<p1,p2,0> | p1,p2 in ProductIds, stp in Setups // the above setupTimes?
-//		: (stp.fromState != p1 || stp.toState != p2) 
-//			&& stp.setupMatrixId == res.setupMatrixId};
 
 
-range resRange = 0..max(res in Resources) res.resourceNr;
-range prodRange = 0..max(p in ProductIds) p;
-//int stpTimes[res in Resources][p1 in ProductIds][p2 in ProductIds] = [
+range resRange = 0..card(Resources);
+range prodRange = 0..card(ProductIds);
+
 int stpTimes[resRange][prodRange][prodRange] = [ r : [ p1 : [ p2: 0]] | r in resRange, p1,p2 in prodRange ];
 int stpCosts[resRange][prodRange][prodRange] = [ r : [ p1 : [ p2: 0]] | r in resRange, p1,p2 in prodRange ];
 
@@ -151,12 +148,13 @@ tuple DemandStepAlternatives {
 	{<<dem,st>,alt> | <dem,st> in DemSteps, alt in Alternatives
 		: st.stepId == item(Steps, ord(Steps, <alt.stepId>)).stepId};
 	
-dvar interval demandStepAlternative[<<dem,st>,alt> in DemandStepAlternative] //todo add "in min .. max"
+dvar interval demandStepAlternative[<<dem,st>,alt> in DemandStepAlternative]
 	optional(1)
+	in dem.deliveryMin..dem.deliveryMax
 	size ftoi(ceil(alt.fixedProcessingTime + alt.variableProcessingTime * dem.quantity));
 
 dvar sequence resources[res in Resources] in
-	all (dem in Demands,st in Steps, alt in Alternatives
+	all (dem in Demands, st in Steps, alt in Alternatives
 		: res.resourceId == alt.resourceId && st.stepId == alt.stepId 
 		  && dem.productId == item(Steps, ord(Steps, <alt.stepId>)).productId)
 		    demandStepAlternative[<<dem,st>,alt>]
@@ -165,8 +163,8 @@ dvar sequence resources[res in Resources] in
 		  && dem.productId == item(Steps, ord(Steps, <alt.stepId>)).productId) dem.productId; 
 
 //                 Setups
-{string} setupMatrixIDsNoNull = union(s in Setups) {s.setupMatrixId}; //{"SMX_CLEAN", "SMX_PROCESS", "SMX_STORAGE"};//
-{string} setupMatrixIDs = setupMatrixIDsNoNull union {"NULL"}; //{"SMX_CLEAN", "SMX_PROCESS", "SMX_STORAGE", "NULL"};//
+{string} setupMatrixIDsNoNull = union(s in Setups) {s.setupMatrixId};
+{string} setupMatrixIDs = setupMatrixIDsNoNull union {"NULL"};
 tuple ProductSetsInMatrix {
 	int p1;
 	int p2;
@@ -174,27 +172,30 @@ tuple ProductSetsInMatrix {
 {ProductSetsInMatrix} productSetsInMatrix[s in setupMatrixIDs] 
 						= {<stp.fromState, stp.toState> | stp in Setups: stp.setupMatrixId == s};
 
-//dvar int costSetupMatrix[p in productSetsInMatrix] =;
-
 dvar interval setupDemandStepAlternative[<<dem,st>,alt> in DemandStepAlternative]
 	optional(1)
 	size 0..maxl(max(res in Resources, <p1,p2> in productSetsInMatrix[res.setupMatrixId]
 				: res.resourceId == alt.resourceId && res.setupMatrixId != "NULL") 
 				item(Setups, ord(Setups, <res.setupMatrixId, p1,p2>)).setupTime, 0); //maybe calculate it better?
 
+dvar sequence setupResources[setRes in SetupResources] in
+	all (dem in Demands, st in Steps, alt in Alternatives
+		: setRes.setupResourceId == st.setupResourceId && st.stepId == alt.stepId 
+		  && dem.productId == item(Steps, ord(Steps, <alt.stepId>)).productId)
+		    setupDemandStepAlternative[<<dem,st>,alt>];
+
 dvar int costSetupDemandeStepAlternative[<<dem,st>,alt> in DemandStepAlternative]; 
 
-//dvar sequence setupResources[sRes in SetupResources] in //this is for the setups on steps
-//	all (smth in smth : some condition) smthElse
-
-
-//                  Storage tanks here
+//                   Storage tanks
 //dvar sequence storageTanks[stT in StorageTanks]
 //	in all();
 
 //make cumulFunctions with a sum of pulse (interval, quantity)
 
 //todo add constraint alwaysIn for every storageTank. using the cumulFunction
+
+
+//                       COSTS
 
 pwlFunction tardinessFees[dem in Demands] = 
 				piecewise{0->dem.due_time; dem.tardinessVariableCost}(dem.due_time, 0);
@@ -225,8 +226,8 @@ dexpr float WeightedSetupCost =
 dexpr float TotalCost = WeightedTardinessCost + WeightedNonDeliveryCost + WeightedProcessingCost + WeightedSetupCost;
 
 execute {
-//	cp.param.Workers = 1;
-	cp.param.TimeLimit = 10;
+	cp.param.Workers = 1;
+	cp.param.TimeLimit = Opl.card(Demands);
 	
 	for(var res in Resources)
 		for(var t in setupTimes[res])
@@ -235,75 +236,65 @@ execute {
 	for(var res in Resources)
 		for(var c in setupCosts[res])
 			stpCosts[Opl.ord(Resources, res)][c.prod1][c.prod2]	= c.value;
-//			stpCosts[Opl.ord(Resources, res)][c.prod1][c.prod2]	= Opl.item(Setups, Opl.ord(Setups, <res.setupMatrixId, c.prod1, c.prod2>)).setupCost;
-//			stpCosts[Opl.ord(Resources, res)][c.prod1][c.prod2]	= Opl.item(Setups, Opl.ord(Setups, <"SMX_FERMENT", 0, 0>)).setupCost;
 
-//	writeln(stpCosts);
-//	writeln(stpTimes);
 }
 minimize 
   TotalCost;
-subject to {	
-
+subject to {
+	// Making sure the unimportnat intervals are not cousing any delay
   	forall(<<dem,st>,alt> in DemandStepAlternative, res in Resources 
-  	  : res.setupMatrixId == "NULL" && res.resourceId == alt.resourceId) {
-  	  	!presenceOf(setupDemandStepAlternative[<<dem,st>,alt>]);
-  	}
-
-	forall(<<dem,st>,alt> in DemandStepAlternative, res in Resources 
-			: res.setupMatrixId != "NULL" && res.resourceId == alt.resourceId) {
-		//depending on the dem.prodID and typeOfPrev(resources[res], demandStepAlternative[<<d,st>,alt>])	
-		SetupTimeValid: lengthOf(setupDemandStepAlternative[<<dem,st>,alt>]) 
-//			== item(setupTimes[res], ord(setupTimes[res], <typeOfPrev(resources[res], demandStepAlternative[<<dem,st>,alt>], res.initialProductId), dem.productId>)).value;
-//			== item(setupTimes[res], ord(setupTimes[res], <0, dem.productId>)).value; //OVER HERE
-//			== item(setupTimes[res], ord(setupTimes[res], <0, 0>)).value; 
-//			== dem.productId
-//			== typeOfPrev(resources[res], demandStepAlternative[<<dem,st>,alt>], res.initialProductId);
-//			== 0;
-			== stpTimes[ord(Resources, res)][typeOfPrev(resources[res], demandStepAlternative[<<dem,st>,alt>], res.initialProductId)][dem.productId];
-
-//		Or use a set of alternative intervals for each demStepAlt depending on the type of prev in resources[res] and make only the presenceOf the correct one True
-
-		costSetupDemandeStepAlternative[<<dem,st>,alt>]
-			== stpCosts[ord(Resources, res)][typeOfPrev(resources[res], demandStepAlternative[<<dem,st>,alt>], res.initialProductId)][dem.productId];
-  	}
-//  	forall(<<dem,st>,alt> in DemandStepAlternative, res in Resources 
-//			: !(res.setupMatrixId != "NULL" && res.resourceId == alt.resourceId)) { //todo fix this forall. It's not doing what it's supposed to	
-//		SetupTimeInvalid: lengthOf(setupDemandStepAlternative[<<dem,st>,alt>]) == 0;
-//		costSetupDemandeStepAlternative[<<dem,st>,alt>] == 0; 
-//  	}
-  	forall(<<dem,st>,alt> in DemandStepAlternative, res in Resources 
-			: (res.setupMatrixId == "NULL" && res.resourceId == alt.resourceId)) { //todo fix this forall. It's not doing what it's supposed to	
-		SetupTimeInvalid: lengthOf(setupDemandStepAlternative[<<dem,st>,alt>]) == 0;
+			: res.setupMatrixId == "NULL" && res.resourceId == alt.resourceId) {
+						
+		!presenceOf(setupDemandStepAlternative[<<dem,st>,alt>]);
+		lengthOf(setupDemandStepAlternative[<<dem,st>,alt>]) == 0;
 		costSetupDemandeStepAlternative[<<dem,st>,alt>] == 0; 
   	}
   	
+  	// All setup intervals are just before the interval they precede
   	forall(<<dem,st>,alt> in DemandStepAlternative)
   		endAtStart(setupDemandStepAlternative[<<dem,st>,alt>], demandStepAlternative[<<dem,st>,alt>]);
+  	
+  	// If a demand is present, all the steps it requires must be present too (and vice versa)
+  	forall(<d,st> in DemSteps)
+	  	presenceOf(demand[d]) == presenceOf(prodSteps[<d,st>]);
   	    
+  	// Every step must be one and only one of it's alternatives 
 	forall(<d,st> in DemSteps)
   		alternative(prodSteps[<d,st>], 
   			all(alt in Alternatives: alt.stepId == st.stepId) demandStepAlternative[<<d,st>,alt>]);
   	
+  	// steps using the same resource must not overlap
 	forall(res in Resources)
 	    ResNoOverlap: noOverlap(resources[res], setupTimes[res], 1);
-	    
-	forall(<d,st> in DemSteps)
-	  	presenceOf(demand[d]) == presenceOf(prodSteps[<d,st>]);
 	
+	// setting the setup time and cost of setups before each step. 
+	forall(<<dem,st>,alt> in DemandStepAlternative, res in Resources 
+					: res.setupMatrixId != "NULL" && res.resourceId == alt.resourceId) {	
+		lengthOf(setupDemandStepAlternative[<<dem,st>,alt>]) 
+			== stpTimes[ord(Resources, res)][typeOfPrev(resources[res], demandStepAlternative[<<dem,st>,alt>], res.initialProductId)][dem.productId];
+			
+		costSetupDemandeStepAlternative[<<dem,st>,alt>]
+			== stpCosts[ord(Resources, res)][typeOfPrev(resources[res], demandStepAlternative[<<dem,st>,alt>], res.initialProductId)][dem.productId];
+  	}
+	    
+	// setups using the same setup resource must not overlap
+	forall(stpRes in SetupResources)
+	  	StpResNoOverlap: noOverlap(setupResources[stpRes]);
+	
+	// precedence requirement for different steps on a product
 	forall(<d1,st1> in DemSteps, <d2,st2> in DemSteps, p in Precedences
 				:st1.stepId == p.predecessorId && st2.stepId == p.successorId && d1 == d2)
 		endBeforeStart(prodSteps[<d1,st1>], prodSteps[<d2,st2>]);
-	
+  	
+  	// the steps on a product of a demand should be spanned in the demand interval
 	forall(d in Demands)
 	    span(demand[d], all(st in Steps : d.productId == st.productId) prodSteps[<d,st>]);
 	
 	//todo use endAtStart for storage!
 	
-	//todo if the 
-	
-
+	//todo if the ..{ I wonder what I was going to write here if the IDE hadn't crashed before finishing this line }
  };	  	
+ 
 //{DemandAssignment} demandAssignments = fill in from your decision variables.
 //{DemandAssignment} demandAssignments =
 //{
@@ -374,4 +365,3 @@ execute {
 //		}
 //	}
 }
-
