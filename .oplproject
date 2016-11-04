@@ -47,6 +47,14 @@
 			<ref name="Ass2.mod" type="model">
 			</ref>
 		</config>
+		<config category="opl" default="false" name="foodTankSetup1">
+			<ref name="Ass2.mod" type="model">
+			</ref>
+			<ref name="Ass2.ops" type="setting">
+			</ref>
+			<ref name="foodTankSetup1.dat" type="data">
+			</ref>
+		</config>
 	</configs>
 	
 </project>
