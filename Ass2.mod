@@ -231,18 +231,20 @@ dvar interval storageAfterProdStepAlternatives[<<dem,st>,storProd> in StorageAft
 		 .. 
 		 minl(item(minMaxStepStorageTime[st.stepId], <st.stepId>).maxTime, maxDemandStoreTime[dem]);	
 
-tuple Shits {
+tuple StorageTankCouples {
 	StorageAfterProdStepAlternatives alt1;
 	StorageAfterProdStepAlternatives alt2;
 }
 // all sets of 2 intervals that need to not overlap!
-{Shits} Shit = {<<<dem1,st1>,storProd1>, <<dem2,st2>,storProd2>> | 
+{StorageTankCouples} storageTankCouples = 
+				{<<<dem1,st1>,storProd1>, <<dem2,st2>,storProd2>> | 
 					<<dem1,st1>,storProd1> in StorageAfterProdStepAlternative,
 					<<dem2,st2>,storProd2> in StorageAfterProdStepAlternative 
 					: dem1.productId != dem2.productId 
 					  && storProd1.storageTankId == storProd2.storageTankId};
 
-dvar sequence storageShit[<sht1, sht2> in Shit] 
+// all sequences of two storage intervals that must not overlap
+dvar sequence storageTankCouple[<sht1, sht2> in storageTankCouples] 
 		in all(sht in StorageAfterProdStepAlternative : sht == sht1 || sht == sht2) 
 						storageAfterProdStepAlternatives[sht]
 		types all(sht in StorageAfterProdStepAlternative : sht == sht1 || sht == sht2) 
@@ -251,6 +253,8 @@ dvar sequence storageShit[<sht1, sht2> in Shit]
 cumulFunction tankCapOverTime[stT in StorageTanks] 
 		= sum(<dem,st> in DemSteps, stPrd in StorageProductions : stPrd.storageTankId == stT.storageTankId && stPrd.consStepId == st.stepId)
 			pulse(storageAfterProdStep[<dem,st>], dem.quantity);
+//todo fix error. tankCapOverTime looks strange in the result for foodTankSetup1
+
 
 //todo setup costs for the storage need to be added too..
 
@@ -326,10 +330,7 @@ subject to {
   	  		, prodSteps[<dem,item(Steps, <storProd.consStepId>)>]);
   	  	startAtEnd(storageAfterProdStepAlternatives[<<dem,st>,storProd>]
   	  		, prodSteps[<dem,st>]);
-     }  
-     
-     forall(<dem,st> in DemSteps : st.stepId in stepsWithSuccessorIDs)
-       presenceOf(storageAfterProdStep[<dem,st>]);//todo necessary? wrong?	    	
+     }      	
     
     // storages need to chose which tank to use. chose just one alternative each
     forall(<dem,st> in DemSteps : st.stepId in stepsWithSuccessorIDs)
@@ -356,7 +357,7 @@ subject to {
 	// tank intervals with different products and same tank should not overlap
 	//todo add setup time for the tanks!
 //	forall(sht in Shit)
-//		noOverlap(storageShit[sht]);
+//		noOverlap(storageTankCouple[sht]);
 		
 	// setting the setup time and cost of setups before each step. 
 	forall(<<dem,st>,alt> in DemandStepAlternative, res in Resources 
@@ -425,6 +426,7 @@ tuple StorageAssignment {
 
 execute {
 	writeln("hello");
+	writeln(storageTankCouple);
 //	writeln("Total Non-Delivery Cost : ", TotalNonDeliveryCost);
 //	writeln("Total Processing Cost : ", TotalProcessingCost);
 //	writeln("Total Setup Cost : ", TotalSetupCost);
