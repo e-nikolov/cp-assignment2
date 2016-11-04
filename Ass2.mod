@@ -243,8 +243,10 @@ tuple Shits {
 					  && storProd1.storageTankId == storProd2.storageTankId};
 
 dvar sequence storageShit[<sht1, sht2> in Shit] 
-		in all(sht in StorageAfterProdStepAlternative : sht == sht1 || sht == sht2) storageAfterProdStepAlternatives[sht]
-		types all(sht in StorageAfterProdStepAlternative : sht == sht1 || sht == sht2) sht.demStep.demand.productId;
+		in all(sht in StorageAfterProdStepAlternative : sht == sht1 || sht == sht2) 
+						storageAfterProdStepAlternatives[sht]
+		types all(sht in StorageAfterProdStepAlternative : sht == sht1 || sht == sht2) 
+						sht.demStep.demand.productId;
 
 cumulFunction tankCapOverTime[stT in StorageTanks] 
 		= sum(<dem,st> in DemSteps, stPrd in StorageProductions : stPrd.storageTankId == stT.storageTankId && stPrd.consStepId == st.stepId)
@@ -309,25 +311,39 @@ subject to {
 
   	//todo set the size of all storage intervals of before first steps to 0!
   	//todo also set their start/end times to 0
-  	forall(<dem,st> in DemSteps : st.stepId in endingStepsIDs)
-  	    !presenceOf(storageAfterProdStep[<dem,st>]);
+//  	forall(<dem,st> in DemSteps : st.stepId in endingStepsIDs) {
+//  	    !presenceOf(storageAfterProdStep[<dem,st>]);
+//  	    startOf(storageAfterProdStep[<dem,st>]) == dem.deliveryMin; //todo remove?
+//     }  	    
  	
   	// All setup intervals are just before the interval they precede
   	forall(<<dem,st>,alt> in DemandStepAlternative)
   		endAtStart(setupDemandStepAlternative[<<dem,st>,alt>], demandStepAlternative[<<dem,st>,alt>]);
   	
   	//fix the position of all storage intervals (their end times and start times) //todo Actually do it
-//  	forall(<dem,st> in DemSteps : st.stepId in stepsWithSuccessorIDs){
-//  	  	startOf(storageAfterProdStep[<dem,st>]) == 1;
-//  	  	endOf(storageAfterProdStep[<dem,st>]) == 3;
-//  		endAtStart(storageBeforeProdStep[<dem,st>], prodSteps[<dem,st>]) or smth
-//  		startAtEnd(storageBeforeProdStep[<dem,st>], prodSteps[<dem,st>]) or smth
-//    }  	
+  	forall(<<dem,st>,storProd> in StorageAfterProdStepAlternative : st.stepId in stepsWithSuccessorIDs){
+  	  	endAtStart(storageAfterProdStepAlternatives[<<dem,st>,storProd>]
+  	  		, prodSteps[<dem,item(Steps, <storProd.consStepId>)>]);
+  	  	startAtEnd(storageAfterProdStepAlternatives[<<dem,st>,storProd>]
+  	  		, prodSteps[<dem,st>]);
+     }  
+     
+     forall(<dem,st> in DemSteps : st.stepId in stepsWithSuccessorIDs)
+       presenceOf(storageAfterProdStep[<dem,st>]);//todo necessary? wrong?	    	
+    
+    // storages need to chose which tank to use. chose just one alternative each
+    forall(<dem,st> in DemSteps : st.stepId in stepsWithSuccessorIDs)
+  	  	alternative(storageAfterProdStep[<dem,st>],
+  	  		all(storProd in StorageProductions : st.stepId == storProd.prodStepId) 
+  	  			storageAfterProdStepAlternatives[<<dem,st>,storProd>]);
 	
   	// If a demand is present, all the steps it requires must be present too (and vice versa)
   	forall(<dem,st> in DemSteps)
 	  	presenceOf(demand[dem]) == presenceOf(prodSteps[<dem,st>]);
-  	    
+	
+	forall(<dem,st> in DemSteps : st.stepId in stepsWithSuccessorIDs)
+  	    presenceOf(demand[dem]) == presenceOf(storageAfterProdStep[<dem,st>]);
+
   	// Every step must be one and only one of it's alternatives 
 	forall(<dem,st> in DemSteps)
   		alternative(prodSteps[<dem,st>], 
@@ -335,7 +351,7 @@ subject to {
   	
   	// steps using the same resource must not overlap
 	forall(res in Resources)
-	    ResNoOverlap: noOverlap(resources[res], setupTimes[res], 1);
+	    noOverlap(resources[res], setupTimes[res], 1);
 	
 	// tank intervals with different products and same tank should not overlap
 	//todo add setup time for the tanks!
@@ -354,7 +370,7 @@ subject to {
 	    
 	// setups using the same setup resource must not overlap
 	forall(stpRes in SetupResources)
-	  	StpResNoOverlap: noOverlap(setupResources[stpRes]);
+	  	noOverlap(setupResources[stpRes]);
 	
 	// precedence requirement for different steps on a product
 	forall(<d1,st1> in DemSteps, <d2,st2> in DemSteps, p in Precedences
