@@ -232,7 +232,7 @@ dvar interval storageAfterProdStepAlternatives[<<dem,st>,storProd> in StorageAft
 		 minl(item(minMaxStepStorageTime[st.stepId], <st.stepId>).maxTime, maxDemandStoreTime[dem]);	
 
 tuple StorageTankCouples {
-	StorageAfterProdStepAlternatives alt1;
+	StorageAfterProdStepAlternatives alt1;// todo rename !
 	StorageAfterProdStepAlternatives alt2;
 }
 // all sets of 2 intervals that need to not overlap!
@@ -244,17 +244,19 @@ tuple StorageTankCouples {
 					  && storProd1.storageTankId == storProd2.storageTankId};
 
 // all sequences of two storage intervals that must not overlap
-dvar sequence storageTankCouple[<sht1, sht2> in storageTankCouples] 
+dvar sequence storageTankCouple[<sht1, sht2> in storageTankCouples] //rename shit
 		in all(sht in StorageAfterProdStepAlternative : sht == sht1 || sht == sht2) 
 						storageAfterProdStepAlternatives[sht]
 		types all(sht in StorageAfterProdStepAlternative : sht == sht1 || sht == sht2) 
 						sht.demStep.demand.productId;
+
 
 cumulFunction tankCapOverTime[stT in StorageTanks] 
 		= sum(<dem,st> in DemSteps, stPrd in StorageProductions : stPrd.storageTankId == stT.storageTankId && stPrd.consStepId == st.stepId)
 			pulse(storageAfterProdStep[<dem,st>], dem.quantity);
 //todo fix error. tankCapOverTime looks strange in the result for foodTankSetup1
 
+//todo the cumul functions have to be for every tank and every product or somethign like that.or not actually.
 
 //todo setup costs for the storage need to be added too..
 
@@ -290,7 +292,7 @@ dexpr float TotalCost = WeightedTardinessCost + WeightedNonDeliveryCost + Weight
 
 execute {
 	cp.param.Workers = 1;
-	cp.param.TimeLimit = Opl.card(Demands);
+	cp.param.TimeLimit = Opl.card(Demands)*10;
 	
 	for(var res in Resources)
 		for(var t in setupTimes[res])
@@ -314,11 +316,11 @@ subject to {
   	}
 
   	//todo set the size of all storage intervals of before first steps to 0!
-  	//todo also set their start/end times to 0
-//  	forall(<dem,st> in DemSteps : st.stepId in endingStepsIDs) {
-//  	    !presenceOf(storageAfterProdStep[<dem,st>]);
-//  	    startOf(storageAfterProdStep[<dem,st>]) == dem.deliveryMin; //todo remove?
-//     }  	    
+//  	todo also set their start/end times to 0
+  	forall(<dem,st> in DemSteps : st.stepId in endingStepsIDs) {
+  	    !presenceOf(storageAfterProdStep[<dem,st>]);
+		lengthOf(storageAfterProdStep[<dem,st>]) == 0;
+     }  	    
  	
   	// All setup intervals are just before the interval they precede
   	forall(<<dem,st>,alt> in DemandStepAlternative)
