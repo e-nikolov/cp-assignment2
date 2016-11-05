@@ -231,34 +231,43 @@ dvar interval storageAfterProdStepAlternatives[<<dem,st>,storProd> in StorageAft
 		 .. 
 		 minl(item(minMaxStepStorageTime[st.stepId], <st.stepId>).maxTime, maxDemandStoreTime[dem]);	
 
-tuple StorageTankCouples {
-	StorageAfterProdStepAlternatives alt1;// todo rename !
-	StorageAfterProdStepAlternatives alt2;
-}
-// all sets of 2 intervals that need to not overlap!
-{StorageTankCouples} storageTankCouples = 
-				{<<<dem1,st1>,storProd1>, <<dem2,st2>,storProd2>> | 
-					<<dem1,st1>,storProd1> in StorageAfterProdStepAlternative,
-					<<dem2,st2>,storProd2> in StorageAfterProdStepAlternative 
-					: dem1.productId != dem2.productId 
-					  && storProd1.storageTankId == storProd2.storageTankId};
+{triplet} setupTimesStorage[t in StorageTanks] =
+	{<p1, p2, time> | <t.setupMatrixId, p1, p2, time, cost> in Setups};
+//	{<stp.fromState, stp.toState, stp.setupTime> 
+//		| stp in Setups : stp.setupMatrixId == t.setupMatrixId};
 
-// all sequences of two storage intervals that must not overlap
-dvar sequence storageTankCouplesSeq[<storage1, storage2> in storageTankCouples] //rename
-		in all(storage in StorageAfterProdStepAlternative : storage == storage1 || storage == storage2) 
-						storageAfterProdStepAlternatives[storage]
-		types all(storage in StorageAfterProdStepAlternative : storage == storage1 || storage == storage2) 
-						storage.demStep.demand.productId;
+{triplet} setupCostsStorage[t in StorageTanks] =
+	{<p1, p2, cost> | <t.setupMatrixId, p1, p2, time, cost> in Setups};
+//	{<stp.fromState, stp.toState, stp.setupCost> 
+//		| stp in Setups : stp.setupMatrixId == t.setupMatrixId};
+	
+statefunction tankState[stT in StorageTanks] with setupTimesStorage[stT];
+
+// turned out useless..
+//tuple StorageTankCouples {
+//	StorageAfterProdStepAlternatives alt1;// todo rename !
+//	StorageAfterProdStepAlternatives alt2;
+//}
+//// all sets of 2 intervals that need to not overlap!
+//{StorageTankCouples} storageTankCouples = 
+//				{<<<dem1,st1>,storProd1>, <<dem2,st2>,storProd2>> | 
+//					<<dem1,st1>,storProd1> in StorageAfterProdStepAlternative,
+//					<<dem2,st2>,storProd2> in StorageAfterProdStepAlternative 
+//					: dem1.productId != dem2.productId 
+//					  && storProd1.storageTankId == storProd2.storageTankId};
+//
+//// all sequences of two storage intervals that must not overlap
+//dvar sequence storageTankCouplesSeq[<storage1, storage2> in storageTankCouples] //rename
+//		in all(storage in StorageAfterProdStepAlternative : storage == storage1 || storage == storage2) 
+//						storageAfterProdStepAlternatives[storage]
+//		types all(storage in StorageAfterProdStepAlternative : storage == storage1 || storage == storage2) 
+//						storage.demStep.demand.productId;
 
 
 cumulFunction tankCapOverTime[stT in StorageTanks] 
 		= sum(<dem,st> in DemSteps, stPrd in StorageProductions : stPrd.storageTankId == stT.storageTankId && stPrd.consStepId == st.stepId)
 			pulse(storageAfterProdStep[<dem,st>], dem.quantity);
 //todo fix error. tankCapOverTime looks strange in the result for foodTankSetup1
-
-//todo the cumul functions have to be for every tank and every product or somethign like that.or not actually.
-
-//todo setup costs for the storage need to be added too..
 
 //                       COSTS
 
@@ -358,9 +367,12 @@ subject to {
 	    noOverlap(resources[res], setupTimesResources[res], 1);
 	
 	// tank intervals with different products and same tank should not overlap
-	//todo add setup time for the tanks!		
-	forall(storageCouple in storageTankCouples)
-	  	noOverlap(storageTankCouplesSeq[storageCouple]);
+	forall(stT in StorageTanks, <<dem,st>,storProd> in StorageAfterProdStepAlternative 
+		: storProd.storageTankId == stT.storageTankId)
+			alwaysEqual(tankState[stT], storageAfterProdStepAlternatives[<<dem,st>,storProd>], dem.productId);
+
+//	forall(storageCouple in storageTankCouples)
+//	  	noOverlap(storageTankCouplesSeq[storageCouple]);
 		
 	// setting the setup time and cost of setups before each step. 
 	forall(<<dem,st>,alt> in DemandStepAlternative, res in Resources 
@@ -429,7 +441,6 @@ tuple StorageAssignment {
 
 execute {
 	writeln("hello");
-	writeln(storageTankCouplesSeq);
 //	writeln("Total Non-Delivery Cost : ", TotalNonDeliveryCost);
 //	writeln("Total Processing Cost : ", TotalProcessingCost);
 //	writeln("Total Setup Cost : ", TotalSetupCost);
