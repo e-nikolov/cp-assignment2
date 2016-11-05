@@ -23,7 +23,7 @@
 			<ref name="Ass2.ops" type="setting">
 			</ref>
 		</config>
-		<config category="opl" default="true" name="foodPrecedence">
+		<config category="opl" default="false" name="foodPrecedence">
 			<ref name="foodPrecedence1.dat" type="data">
 			</ref>
 			<ref name="Ass2.mod" type="model">
@@ -56,6 +56,10 @@
 			</ref>
 		</config>
 		<config category="opl" default="false" name="deleteme">
+		</config>
+		<config category="opl" default="true" name="test">
+			<ref name="test.mod" type="model">
+			</ref>
 		</config>
 	</configs>
 	
