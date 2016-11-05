@@ -134,8 +134,8 @@ int maxResTime = max(s in Setups) s.setupTime;
 			&& stp.setupMatrixId == res.setupMatrixId && c == stp.setupCost};
 
 
-range resRange = 0..card(Resources);
-range prodRange = 0..card(ProductIds);
+range resRange = 0..card(Resources)-1;
+range prodRange = 0..card(ProductIds)-1;
 
 int stpTimes[resRange][prodRange][prodRange] = [ r : [ p1 : [ p2: 0]] | r in resRange, p1,p2 in prodRange ];
 int stpCosts[resRange][prodRange][prodRange] = [ r : [ p1 : [ p2: 0]] | r in resRange, p1,p2 in prodRange ]; //todo rename these !! (add setup resourse)
@@ -194,7 +194,7 @@ dvar int costSetupDemandeStepAlternative[<<dem,st>,alt> in DemandStepAlternative
 {string} stepsWithSuccessorIDs = union(pr in Precedences) {pr.predecessorId};
 {string} endingStepsIDs = stepIDs diff stepsWithSuccessorIDs;
  
-//todo this calculation can be better. The sum of the minimum quantit 
+//todo this calculation can be better. The sum of all minimum alternative of lenghths of intervals of steps. 
 int maxDemandStoreTime[dem in Demands] = dem.deliveryMax;
 //		- sum(st in Steps) min(alt in Alternatives) where st.productId == dem.productId && alt.stepId == st.stepId;
 
@@ -242,10 +242,10 @@ dvar interval storageAfterProdStepAlternatives[<<dem,st>,storProd> in StorageAft
 //		| stp in Setups : stp.setupMatrixId == t.setupMatrixId};
 
 
-range tankRange = 0..card(StorageTanks);
-int storageSetupCosts[tankRange][prodRange][prodRange] = [ t : [ p1 : [ p2: 0]] | t in tankRange, p1,p2 in prodRange];
+//range tankRange = 0..card(StorageTanks)-1;
+//int storageSetupCosts[tankRange][prodRange][prodRange] = [ t : [ p1 : [ p2: 0]] | t in tankRange, p1,p2 in prodRange];
 
-dvar int costStorageAfterProdStepAlternatives[<<dem,st>,storProd> in StorageAfterProdStepAlternative]; 
+//dvar int costStorageAfterProdStepAlternatives[<<dem,st>,storProd> in StorageAfterProdStepAlternative]; 
 	
 statefunction tankState[stT in StorageTanks] with setupTimesStorage[stT];
 
@@ -256,27 +256,6 @@ dvar sequence storageTankSeq[t in StorageTanks]
 		types all(<<dem,st>,storProd> in StorageAfterProdStepAlternative
 					: storProd.storageTankId == t.storageTankId)
 			dem.productId;
-
-// turned out useless..
-//tuple StorageTankCouples {
-//	StorageAfterProdStepAlternatives alt1;// todo rename !
-//	StorageAfterProdStepAlternatives alt2;
-//}
-//// all sets of 2 intervals that need to not overlap!
-//{StorageTankCouples} storageTankCouples = 
-//				{<<<dem1,st1>,storProd1>, <<dem2,st2>,storProd2>> | 
-//					<<dem1,st1>,storProd1> in StorageAfterProdStepAlternative,
-//					<<dem2,st2>,storProd2> in StorageAfterProdStepAlternative 
-//					: dem1.productId != dem2.productId 
-//					  && storProd1.storageTankId == storProd2.storageTankId};
-//
-//// all sequences of two storage intervals that must not overlap
-//dvar sequence storageTankCouplesSeq[<storage1, storage2> in storageTankCouples] //rename
-//		in all(storage in StorageAfterProdStepAlternative : storage == storage1 || storage == storage2) 
-//						storageAfterProdStepAlternatives[storage]
-//		types all(storage in StorageAfterProdStepAlternative : storage == storage1 || storage == storage2) 
-//						storage.demStep.demand.productId;
-
 
 cumulFunction tankCapOverTime[stT in StorageTanks] 
 		= sum(<dem,st> in DemSteps, stPrd in StorageProductions : stPrd.storageTankId == stT.storageTankId && stPrd.consStepId == st.stepId)
@@ -298,10 +277,9 @@ dexpr float ProcessingCost = sum(<<dem,st>,alt> in DemandStepAlternative)
 
 //dexpr float SetupCost = 0; 
 dexpr float SetupCost = sum(<<dem,st>,alt> in DemandStepAlternative)
-							costSetupDemandeStepAlternative[<<dem,st>,alt>]
-						+ sum(<<dem,st>,storProd> in StorageAfterProdStepAlternative)
-							costStorageAfterProdStepAlternatives[<<dem,st>,storProd>]; 
-				//todo the cost of Storage settup needs to be added too !!!
+							costSetupDemandeStepAlternative[<<dem,st>,alt>];
+//						+ sum(<<dem,st>,storProd> in StorageAfterProdStepAlternative)
+//							costStorageAfterProdStepAlternatives[<<dem,st>,storProd>]; 
 
 dexpr float WeightedTardinessCost = 
 		TardinessCost * item(CriterionWeights, <"TardinessCost">).weight;
@@ -327,9 +305,9 @@ execute {
 		for(var c in setupCostsResources[res])
 			stpCosts[Opl.ord(Resources, res)][c.prod1][c.prod2]	= c.value;
 	
-	for(var tank in StorageTanks)
-		for(var c in setupCostsStorage[tank])
-			storageSetupCosts[Opl.ord(StorageTanks, tank)][c.prod1][c.prod2] = c.value;
+//	for(var tank in StorageTanks)
+//		for(var c in setupCostsStorage[tank])
+//			storageSetupCosts[Opl.ord(StorageTanks, tank)][c.prod1][c.prod2] = c.value;
 
 }
 minimize 
@@ -343,34 +321,34 @@ subject to {
 		lengthOf(setupDemandStepAlternative[<<dem,st>,alt>]) == 0;
 		costSetupDemandeStepAlternative[<<dem,st>,alt>] == 0; 
   	}
-  	forall(<<dem,st>,storProd> in StorageAfterProdStepAlternative, tank in StorageTanks
-  						: tank.setupMatrixId == "NULL" && tank.storageTankId == storProd.storageTankId) {
-  		costStorageAfterProdStepAlternatives[<<dem,st>,storProd>] == 0;					
-  	}
+//  	forall(<<dem,st>,storProd> in StorageAfterProdStepAlternative, tank in StorageTanks
+//  						: tank.setupMatrixId == "NULL" && tank.storageTankId == storProd.storageTankId) {
+//  		costStorageAfterProdStepAlternatives[<<dem,st>,storProd>] == 0;					
+//  	}
   	
 	//end of the last steps must be after the mindeliverytime.
 	forall(<dem,st> in DemSteps : st.stepId in endingStepsIDs)
 	  	endOf(prodSteps[<dem,st>]) >= dem.deliveryMin;
 	
-//  	todo also set their start/end times to 0
   	forall(<dem,st> in DemSteps : st.stepId in endingStepsIDs) {
   	    !presenceOf(storageAfterProdStep[<dem,st>]);
 		lengthOf(storageAfterProdStep[<dem,st>]) == 0;
     }  	    
+    forall(<<dem,st>,storProd> in StorageAfterProdStepAlternative : st.stepId in endingStepsIDs){
+    	!presenceOf(storageAfterProdStepAlternatives[<<dem,st>,storProd>]);
+    }
  	
   	// All setup intervals are just before the interval they precede
   	forall(<<dem,st>,alt> in DemandStepAlternative)
   		endAtStart(setupDemandStepAlternative[<<dem,st>,alt>], demandStepAlternative[<<dem,st>,alt>]);
   	
-  	//fix the position of all storage intervals (their end times and start times) //todo Actually do it
+  	//fix the position of all storage intervals (their end times and start times)
   	forall(<<dem,st>,storProd> in StorageAfterProdStepAlternative : st.stepId in stepsWithSuccessorIDs){
   	  	endAtStart(storageAfterProdStepAlternatives[<<dem,st>,storProd>]
   	  		, prodSteps[<dem,item(Steps, <storProd.consStepId>)>]);
   	  	startAtEnd(storageAfterProdStepAlternatives[<<dem,st>,storProd>]
   	  		, prodSteps[<dem,st>]);
      }      	
-    
-    //todo check if -1 in initialproductID will break something !!!!!!!!!!!!!!!!!!
     
     // storages need to chose which tank to use. chose just one alternative each
     forall(<dem,st> in DemSteps : st.stepId in stepsWithSuccessorIDs)
@@ -412,11 +390,11 @@ subject to {
 			== stpCosts[ord(Resources, res)][typeOfPrev(resources[res], demandStepAlternative[<<dem,st>,alt>], res.initialProductId)][dem.productId];
   	}
   	
-  	forall(<<dem,st>,storProd> in StorageAfterProdStepAlternative, tank in StorageTanks
-  						: tank.setupMatrixId != "NULL" && tank.storageTankId == storProd.storageTankId) {
-  		costStorageAfterProdStepAlternatives[<<dem,st>,storProd>] 
-  			== storageSetupCosts[ord(StorageTanks, tank)][typeOfPrev(storageTankSeq[tank], storageAfterProdStepAlternatives[<<dem,st>,storProd>], tank.initialProductId)][dem.productId];					
-  	}
+//  	forall(<<dem,st>,storProd> in StorageAfterProdStepAlternative, tank in StorageTanks
+//  						: tank.setupMatrixId != "NULL" && tank.storageTankId == storProd.storageTankId) {
+//  		costStorageAfterProdStepAlternatives[<<dem,st>,storProd>] 
+//  			== storageSetupCosts[ord(StorageTanks, tank)][typeOfPrev(storageTankSeq[tank], storageAfterProdStepAlternatives[<<dem,st>,storProd>], tank.initialProductId)][dem.productId];					
+//  	}
 	    
 	// setups using the same setup resource must not overlap
 	forall(stpRes in SetupResources)
@@ -431,11 +409,8 @@ subject to {
 	forall(dem in Demands)
 	    span(demand[dem], all(st in Steps : dem.productId == st.productId) prodSteps[<dem,st>]);
 	
-	//todo add constraint that the cumulFucntion's are <= the cap of the storageTank
 	forall(stT in StorageTanks)
 	    tankCapOverTime[stT] <= stT.quantityMax;
-	
-	//todo if the ..{ I wonder what I was going to write here if the IDE hadn't crashed before finishing this line }
  };	  	
  
 //{DemandAssignment} demandAssignments = fill in from your decision variables.
