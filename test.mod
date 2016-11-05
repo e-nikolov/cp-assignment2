@@ -9,15 +9,17 @@ tuple Tup {
 dvar interval test[<num> in items]
     optional(1)
     in 0..5
-    size 5;
+    size 2;
 
 dvar sequence itemSeq[<num> in items]
-    in all(<num> in items) test[<num>]
-    types all(<num> in items) 3;
+    in all(<num1> in items: num1 == num) test[<num>]
+    types all(<num1> in items: num1 == num) 3;
                         
 subject to {
-    forall(<num> in items)
+    forall(<num> in items) {
         presenceOf(test[<num>]);
+        noOverlap(itemSeq[<num>]);
+    }
 }
 
 

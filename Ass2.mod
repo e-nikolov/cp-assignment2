@@ -292,7 +292,8 @@ dexpr float TotalCost = WeightedTardinessCost + WeightedNonDeliveryCost + Weight
 
 execute {
 	cp.param.Workers = 1;
-	cp.param.TimeLimit = Opl.card(Demands)*10;
+//	cp.param.TimeLimit = Opl.card(Demands)*10;
+	cp.param.TimeLimit = Opl.card(Demands);
 	
 	for(var res in Resources)
 		for(var t in setupTimes[res])
@@ -357,9 +358,9 @@ subject to {
 	    noOverlap(resources[res], setupTimes[res], 1);
 	
 	// tank intervals with different products and same tank should not overlap
-	//todo add setup time for the tanks!
-//	forall(sht in Shit)
-//		noOverlap(storageTankCouple[sht]);
+	//todo add setup time for the tanks!		
+	forall(sht in storageTankCouples)
+	  	noOverlap(storageTankCouple[sht]);
 		
 	// setting the setup time and cost of setups before each step. 
 	forall(<<dem,st>,alt> in DemandStepAlternative, res in Resources 

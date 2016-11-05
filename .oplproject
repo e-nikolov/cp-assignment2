@@ -55,8 +55,6 @@
 			<ref name="foodTankSetup1.dat" type="data">
 			</ref>
 		</config>
-		<config category="opl" default="false" name="deleteme">
-		</config>
 		<config category="opl" default="true" name="test">
 			<ref name="test.mod" type="model">
 			</ref>
