@@ -1,6 +1,7 @@
 /*********************************************
  * OPL 12.6.3.0 Model
- * Author: enikolov
+ * Authors: Emil Nikolov - 0972305 - e.e.nikolov@student.tue.nl
+ *          Petar Stoykov - 0976265 - p.stoykov@student.tue.nl
  * Creation Date: 19 Oct 2016 at 15:23:24
  *********************************************/
 
@@ -137,12 +138,12 @@ int maxResTime = max(s in Setups) s.setupTime;
 //range resRange = 0..card(Resources)-1;
 //range prodRange = 0..card(ProductIds)-1;
 //int stpTimes[resRange][prodRange][prodRange] = [ r : [ p1 : [ p2: 0]] | r in resRange, p1,p2 in prodRange ];
-//int stpCosts[resRange][prodRange][prodRange] = [ r : [ p1 : [ p2: 0]] | r in resRange, p1,p2 in prodRange ]; //todo rename these !! (add setup resourse)
+//int stpCosts[resRange][prodRange][prodRange] = [ r : [ p1 : [ p2: 0]] | r in resRange, p1,p2 in prodRange ];
 
-int resSetupCost[r in Resources][p1 in ProductIds][p2 in ProductIds] =
+int resSetupCost[r in Resources][p1 in ProductIds union {-1}][p2 in ProductIds] =
 	sum(<r.setupMatrixId, p1, p2, time, cost> in Setups) cost;
 	
-int resSetupTime[r in Resources][p1 in ProductIds][p2 in ProductIds] =
+int resSetupTime[r in Resources][p1 in ProductIds union {-1}][p2 in ProductIds] =
 	sum(<r.setupMatrixId, p1, p2, time, cost> in Setups) time;
 	  
 tuple DemandStepAlternatives {
@@ -178,7 +179,7 @@ tuple ProductSetsInMatrix {
 						= {<stp.fromState, stp.toState> | stp in Setups: stp.setupMatrixId == s};
 
 dvar interval setupDemandStepAlternative[<<dem,st>,alt> in DemandStepAlternative]
-	optional(1); //todo try it with (0) .. the size is already set to 0 when uneeded.
+	optional(1);
 //	size 0..9999;
 //	size 0..maxl(max(res in Resources, <p1,p2> in productSetsInMatrix[res.setupMatrixId]
 //				: res.resourceId == alt.resourceId && res.setupMatrixId != "NULL") 
@@ -267,7 +268,6 @@ cumulFunction tankCapOverTime[stT in StorageTanks]
 		= sum(<dem,st> in DemSteps, stPrd in StorageProductions 
 			: stPrd.storageTankId == stT.storageTankId && stPrd.prodStepId == st.stepId)
 				pulse(storageAfterProdStep[<dem,st>], dem.quantity);
-//todo fix error. tankCapOverTime looks strange in the result for foodTankSetup1
 
 //                       COSTS
 
@@ -279,7 +279,7 @@ dexpr float NonDeliveryCost = sum(dem in Demands)
 		 		(1 - presenceOf(demand[dem])) * (dem.quantity * dem.nonDeliveryVariableCost);
 
 dexpr float ProcessingCost = sum(<<dem,st>,alt> in DemandStepAlternative) 
-				presenceOf(demandStepAlternative[<<dem,st>,alt>]) // verify !!
+				presenceOf(demandStepAlternative[<<dem,st>,alt>])
 				*(alt.fixedProcessingCost + dem.quantity * alt.variableProcessingCost);
 
 //dexpr float SetupCost = 0; 
@@ -326,7 +326,7 @@ subject to {
 			: res.setupMatrixId == "NULL" && res.resourceId == alt.resourceId) {
 						
 		!presenceOf(setupDemandStepAlternative[<<dem,st>,alt>]);
-		lengthOf(setupDemandStepAlternative[<<dem,st>,alt>]) == 0;
+//		lengthOf(setupDemandStepAlternative[<<dem,st>,alt>]) == 0;
 		costSetupDemandeStepAlternative[<<dem,st>,alt>] == 0; 
   	}
   	
@@ -369,7 +369,7 @@ subject to {
 	forall(<dem,st> in DemSteps : st.stepId in stepsWithSuccessorIDs)
   	    presenceOf(demand[dem]) == presenceOf(storageAfterProdStep[<dem,st>]);
   	    
-  	// if a demand is not present then all the setup intervals should not be present too.
+//  	 if a demand is not present then all the setup intervals should not be present too.
   	forall(<<dem,st>,alt> in DemandStepAlternative)
   		!presenceOf(demand[dem]) => !presenceOf(setupDemandStepAlternative[<<dem,st>,alt>]);
 
@@ -391,8 +391,8 @@ subject to {
 	forall(<<dem,st>,alt> in DemandStepAlternative, res in Resources 
 					: res.setupMatrixId != "NULL" && res.resourceId == alt.resourceId) {
 		
-		presenceOf(demandStepAlternative[<<dem,st>,alt>]) 
-			== presenceOf(setupDemandStepAlternative[<<dem,st>,alt>]);
+		!presenceOf(demandStepAlternative[<<dem,st>,alt>]) 
+			=> !presenceOf(setupDemandStepAlternative[<<dem,st>,alt>]);
 		
 		setupLenConstraint: lengthOf(setupDemandStepAlternative[<<dem,st>,alt>])// == 0;
 			== resSetupTime[res][typeOfPrev(resources[res], demandStepAlternative[<<dem,st>,alt>], res.initialProductId)][dem.productId];
@@ -456,7 +456,6 @@ tuple StorageAssignment {
 //{StorageAssignment} storageAssignments = fill in from your decision variables.
 
 execute {
-	writeln("hello");
 //	writeln("Total Non-Delivery Cost : ", TotalNonDeliveryCost);
 //	writeln("Total Processing Cost : ", TotalProcessingCost);
 //	writeln("Total Setup Cost : ", TotalSetupCost);
