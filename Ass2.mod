@@ -128,25 +128,30 @@ int maxResTime = max(s in Setups) s.setupTime;
 		: stp.fromState == p1 && stp.toState == p2 
 			&& stp.setupMatrixId == res.setupMatrixId && t == stp.setupTime};
 
-{triplet} setupCostsResources[res in Resources] =
-	{<p1,p2,c> | p1,p2 in ProductIds, stp in Setups, c in 0..maxint
-		: stp.fromState == p1 && stp.toState == p2 
-			&& stp.setupMatrixId == res.setupMatrixId && c == stp.setupCost};
+//{triplet} setupCostsResources[res in Resources] =
+//	{<p1,p2,c> | p1,p2 in ProductIds, stp in Setups, c in 0..maxint
+//		: stp.fromState == p1 && stp.toState == p2 
+//			&& stp.setupMatrixId == res.setupMatrixId && c == stp.setupCost};
 
 
-range resRange = 0..card(Resources)-1;
-range prodRange = 0..card(ProductIds)-1;
+//range resRange = 0..card(Resources)-1;
+//range prodRange = 0..card(ProductIds)-1;
+//int stpTimes[resRange][prodRange][prodRange] = [ r : [ p1 : [ p2: 0]] | r in resRange, p1,p2 in prodRange ];
+//int stpCosts[resRange][prodRange][prodRange] = [ r : [ p1 : [ p2: 0]] | r in resRange, p1,p2 in prodRange ]; //todo rename these !! (add setup resourse)
 
-int stpTimes[resRange][prodRange][prodRange] = [ r : [ p1 : [ p2: 0]] | r in resRange, p1,p2 in prodRange ];
-int stpCosts[resRange][prodRange][prodRange] = [ r : [ p1 : [ p2: 0]] | r in resRange, p1,p2 in prodRange ]; //todo rename these !! (add setup resourse)
-
+int resSetupCost[r in Resources][p1 in ProductIds][p2 in ProductIds] =
+	sum(<r.setupMatrixId, p1, p2, time, cost> in Setups) cost;
+	
+int resSetupTime[r in Resources][p1 in ProductIds][p2 in ProductIds] =
+	sum(<r.setupMatrixId, p1, p2, time, cost> in Setups) time;
+	  
 tuple DemandStepAlternatives {
 	DemandStep demStep;
 	Alternative altern;
 }
 {DemandStepAlternatives} DemandStepAlternative = 
 	{<<dem,st>,alt> | <dem,st> in DemSteps, alt in Alternatives
-		: st.stepId == item(Steps, <alt.stepId>).stepId};
+		: st.stepId == alt.stepId};
 	
 dvar interval demandStepAlternative[<<dem,st>,alt> in DemandStepAlternative]
 	optional(1)
@@ -173,10 +178,11 @@ tuple ProductSetsInMatrix {
 						= {<stp.fromState, stp.toState> | stp in Setups: stp.setupMatrixId == s};
 
 dvar interval setupDemandStepAlternative[<<dem,st>,alt> in DemandStepAlternative]
-	optional(1) //todo try it with (0) .. the size is already set to 0 when uneeded.
-	size 0..maxl(max(res in Resources, <p1,p2> in productSetsInMatrix[res.setupMatrixId]
-				: res.resourceId == alt.resourceId && res.setupMatrixId != "NULL") 
-				item(Setups, <res.setupMatrixId, p1,p2>).setupTime, 0); //maybe calculate it better?
+	optional(1); //todo try it with (0) .. the size is already set to 0 when uneeded.
+//	size 0..9999;
+//	size 0..maxl(max(res in Resources, <p1,p2> in productSetsInMatrix[res.setupMatrixId]
+//				: res.resourceId == alt.resourceId && res.setupMatrixId != "NULL") 
+//				item(Setups, <res.setupMatrixId, p1,p2>).setupTime, 0); //maybe calculate it better?
 
 dvar sequence setupResources[setRes in SetupResources] in
 	all (dem in Demands, st in Steps, alt in Alternatives
@@ -298,13 +304,13 @@ execute {
 //	cp.param.TimeLimit = Opl.card(Demands)*10;
 	cp.param.TimeLimit = Opl.card(Demands);
 	
-	for(var res in Resources)
-		for(var t in setupTimesResources[res])
-			stpTimes[Opl.ord(Resources, res)][t.prod1][t.prod2] = t.value;
-			
-	for(var res in Resources)
-		for(var c in setupCostsResources[res])
-			stpCosts[Opl.ord(Resources, res)][c.prod1][c.prod2]	= c.value;
+//	for(var res in Resources)
+//		for(var t in setupTimesResources[res])
+//			stpTimes[Opl.ord(Resources, res)][t.prod1][t.prod2] = t.value;
+//			
+//	for(var res in Resources)
+//		for(var c in setupCostsResources[res])
+//			stpCosts[Opl.ord(Resources, res)][c.prod1][c.prod2]	= c.value;
 	
 //	for(var tank in StorageTanks)
 //		for(var c in setupCostsStorage[tank])
@@ -315,6 +321,7 @@ minimize
   TotalCost;
 subject to {
 	// Making sure the unimportnat intervals are not cousing any useless test cases
+	// every setup for a step who's resource has no setup goes to 0. the cost too.
   	forall(<<dem,st>,alt> in DemandStepAlternative, res in Resources 
 			: res.setupMatrixId == "NULL" && res.resourceId == alt.resourceId) {
 						
@@ -322,14 +329,10 @@ subject to {
 		lengthOf(setupDemandStepAlternative[<<dem,st>,alt>]) == 0;
 		costSetupDemandeStepAlternative[<<dem,st>,alt>] == 0; 
   	}
-//  	forall(<<dem,st>,storProd> in StorageAfterProdStepAlternative, tank in StorageTanks
-//  						: tank.setupMatrixId == "NULL" && tank.storageTankId == storProd.storageTankId) {
-//  		costStorageAfterProdStepAlternatives[<<dem,st>,storProd>] == 0;					
-//  	}
   	
 	//end of the last steps must be after the mindeliverytime.
 	forall(<dem,st> in DemSteps : st.stepId in endingStepsIDs)
-	  	endOf(prodSteps[<dem,st>]) >= dem.deliveryMin;
+	  	presenceOf(prodSteps[<dem,st>]) => (endOf(prodSteps[<dem,st>]) >= dem.deliveryMin);
 	
   	forall(<dem,st> in DemSteps : st.stepId in endingStepsIDs) {
   	    !presenceOf(storageAfterProdStep[<dem,st>]);
@@ -337,6 +340,7 @@ subject to {
     }  	    
     forall(<<dem,st>,storProd> in StorageAfterProdStepAlternative : st.stepId in endingStepsIDs){
     	!presenceOf(storageAfterProdStepAlternatives[<<dem,st>,storProd>]);
+    	lengthOf(storageAfterProdStepAlternatives[<<dem,st>,storProd>]) == 0;
     }
  	
   	// All setup intervals are just before the interval they precede
@@ -349,7 +353,7 @@ subject to {
   	  		, prodSteps[<dem,item(Steps, <storProd.consStepId>)>]);
   	  	startAtEnd(storageAfterProdStepAlternatives[<<dem,st>,storProd>]
   	  		, prodSteps[<dem,st>]);
-     }      	
+     }
     
     // storages need to chose which tank to use. chose just one alternative each
     forall(<dem,st> in DemSteps : st.stepId in stepsWithSuccessorIDs)
@@ -361,8 +365,13 @@ subject to {
   	forall(<dem,st> in DemSteps)
 	  	presenceOf(demand[dem]) == presenceOf(prodSteps[<dem,st>]);
 	
+	// storage intervals are present/absent the same as their demand
 	forall(<dem,st> in DemSteps : st.stepId in stepsWithSuccessorIDs)
   	    presenceOf(demand[dem]) == presenceOf(storageAfterProdStep[<dem,st>]);
+  	    
+  	// if a demand is not present then all the setup intervals should not be present too.
+  	forall(<<dem,st>,alt> in DemandStepAlternative)
+  		!presenceOf(demand[dem]) => !presenceOf(setupDemandStepAlternative[<<dem,st>,alt>]);
 
   	// Every step must be one and only one of it's alternatives 
 	forall(<dem,st> in DemSteps)
@@ -377,25 +386,22 @@ subject to {
 	forall(stT in StorageTanks, <<dem,st>,storProd> in StorageAfterProdStepAlternative 
 		: storProd.storageTankId == stT.storageTankId)
 			alwaysEqual(tankState[stT], storageAfterProdStepAlternatives[<<dem,st>,storProd>], dem.productId);
-
-//	forall(storageCouple in storageTankCouples)
-//	  	noOverlap(storageTankCouplesSeq[storageCouple]);
 		
 	// setting the setup time and cost of setups before each step. 
 	forall(<<dem,st>,alt> in DemandStepAlternative, res in Resources 
-					: res.setupMatrixId != "NULL" && res.resourceId == alt.resourceId) {	
-		lengthOf(setupDemandStepAlternative[<<dem,st>,alt>]) 
-			== stpTimes[ord(Resources, res)][typeOfPrev(resources[res], demandStepAlternative[<<dem,st>,alt>], res.initialProductId)][dem.productId];
+					: res.setupMatrixId != "NULL" && res.resourceId == alt.resourceId) {
+		
+		presenceOf(demandStepAlternative[<<dem,st>,alt>]) 
+			== presenceOf(setupDemandStepAlternative[<<dem,st>,alt>]);
+		
+		setupLenConstraint: lengthOf(setupDemandStepAlternative[<<dem,st>,alt>])// == 0;
+			== resSetupTime[res][typeOfPrev(resources[res], demandStepAlternative[<<dem,st>,alt>], res.initialProductId)][dem.productId];
+//			== stpTimes[ord(Resources, res)][typeOfPrev(resources[res], demandStepAlternative[<<dem,st>,alt>], res.initialProductId)][dem.productId];
 			
-		costSetupDemandeStepAlternative[<<dem,st>,alt>]
-			== stpCosts[ord(Resources, res)][typeOfPrev(resources[res], demandStepAlternative[<<dem,st>,alt>], res.initialProductId)][dem.productId];
+		setupCostConstraint: costSetupDemandeStepAlternative[<<dem,st>,alt>]//== 0;
+			== resSetupCost[res][typeOfPrev(resources[res], demandStepAlternative[<<dem,st>,alt>], res.initialProductId)][dem.productId];
+//			== stpCosts[ord(Resources, res)][typeOfPrev(resources[res], demandStepAlternative[<<dem,st>,alt>], res.initialProductId)][dem.productId];
   	}
-  	
-//  	forall(<<dem,st>,storProd> in StorageAfterProdStepAlternative, tank in StorageTanks
-//  						: tank.setupMatrixId != "NULL" && tank.storageTankId == storProd.storageTankId) {
-//  		costStorageAfterProdStepAlternatives[<<dem,st>,storProd>] 
-//  			== storageSetupCosts[ord(StorageTanks, tank)][typeOfPrev(storageTankSeq[tank], storageAfterProdStepAlternatives[<<dem,st>,storProd>], tank.initialProductId)][dem.productId];					
-//  	}
 	    
 	// setups using the same setup resource must not overlap
 	forall(stpRes in SetupResources)
