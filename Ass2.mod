@@ -236,8 +236,8 @@ dvar interval storageAfterProdStepAlternatives[<<dem,st>,storProd> in StorageAft
 //	{<stp.fromState, stp.toState, stp.setupTime> 
 //		| stp in Setups : stp.setupMatrixId == t.setupMatrixId};
 
-{triplet} setupCostsStorage[t in StorageTanks] =
-	{<p1, p2, cost> | <t.setupMatrixId, p1, p2, time, cost> in Setups};
+//{triplet} setupCostsStorage[t in StorageTanks] =
+//	{<p1, p2, cost> | <t.setupMatrixId, p1, p2, time, cost> in Setups};
 //	{<stp.fromState, stp.toState, stp.setupCost> 
 //		| stp in Setups : stp.setupMatrixId == t.setupMatrixId};
 
@@ -249,17 +249,18 @@ dvar interval storageAfterProdStepAlternatives[<<dem,st>,storProd> in StorageAft
 	
 statefunction tankState[stT in StorageTanks] with setupTimesStorage[stT];
 
-dvar sequence storageTankSeq[t in StorageTanks]
-		in all(<<dem,st>,storProd> in StorageAfterProdStepAlternative
-					: storProd.storageTankId == t.storageTankId)
-			storageAfterProdStepAlternatives[<<dem,st>,storProd>]
-		types all(<<dem,st>,storProd> in StorageAfterProdStepAlternative
-					: storProd.storageTankId == t.storageTankId)
-			dem.productId;
+//dvar sequence storageTankSeq[t in StorageTanks]
+//		in all(<<dem,st>,storProd> in StorageAfterProdStepAlternative
+//					: storProd.storageTankId == t.storageTankId)
+//			storageAfterProdStepAlternatives[<<dem,st>,storProd>]
+//		types all(<<dem,st>,storProd> in StorageAfterProdStepAlternative
+//					: storProd.storageTankId == t.storageTankId)
+//			dem.productId;
 
 cumulFunction tankCapOverTime[stT in StorageTanks] 
-		= sum(<dem,st> in DemSteps, stPrd in StorageProductions : stPrd.storageTankId == stT.storageTankId && stPrd.consStepId == st.stepId)
-			pulse(storageAfterProdStep[<dem,st>], dem.quantity);
+		= sum(<dem,st> in DemSteps, stPrd in StorageProductions 
+			: stPrd.storageTankId == stT.storageTankId && stPrd.prodStepId == st.stepId)
+				pulse(storageAfterProdStep[<dem,st>], dem.quantity);
 //todo fix error. tankCapOverTime looks strange in the result for foodTankSetup1
 
 //                       COSTS
