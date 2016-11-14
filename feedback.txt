@@ -1,0 +1,61 @@
+- First of all, although not the most important, you need make that your model writes correct output. Here's some code that may help point you in the right direction:
+
+tuple StepAssignment {
+  key string demandId; 
+  key string stepId;  
+  int startTime;    
+  int endTime;
+  string resourceId;
+  float procCost;
+  float setupCost;
+  int startTimeSetup;
+  int endTimeSetup;
+  string setupResourceId;
+};
+
+{StepAssignment} stepAssignments =
+{<d.demandId, 
+  st.stepId, 
+  startOf(productionSteps[<d,st>]), 
+  endOf(productionSteps[<d,st>]), 
+  a.resourceId,
+  presenceOf(productionStepsOnAlternatives[<d,a>]) * (a.fixedProcCost + (a.variableProcCost * d.quantity)),
+  setupCostArray[r]
+             [typeOfPrev(resources[r],
+                         productionStepsOnAlternatives[<d,a>],
+                         r.initialProductId,
+                         -1)]
+             [d.productId],
+startOf(setupSteps[<d,st>]),             
+endOf(setupSteps[<d,st>]),
+st.setupResourceId>
+| <d,st> in DemandSteps, <d,a> in DemandAlternatives, r in Resources
+: presenceOf(productionStepsOnAlternatives[<d,a>]) && 
+ st.stepId == a.stepId &&
+ a.resourceId == r.resourceId
+};
+
+- I tested on a small instance where the minDelay is negative (can happen). I attach that instance. Your model should be able to handle this. You may want to consider using endBeforeStart and startBeforeEnd .
+- lines 398 and 402. Ask yourself what happens if demandStepAlternative[<<dem,st>,alt>] is absent. The typeOfPrev is 0 then, which is valid productId, but that is not what you want. I work with a separate productId -1 to and from which setup time and cost is always 0. Setup cost expression then looks something like:
+
+dexpr int TotalSetupCost = 
+sum(<d,a> in DemandAlternatives, r in Resources: a.resourceId == r.resourceId) 
+setupCostArray[r]
+             [typeOfPrev(resources[r],
+                         productionStepsOnAlternatives[<d,a>],
+                         r.initialProductId,
+                         -1)]
+             [d.productId]; 
+
+- line 328-330. I would remove this for now as it should work if setups are 0 so that sizes of intervals are 0. With all the presenceOf manipulation you risk of expressing an infeasible problem too.
+- line 335. This tends to work better without the "presenceOf =>", but then you need to do something with the second argument of endOf.
+- Not sure I get lines 337-339 or 341-343.
+- Line 374. Will == work? Stronger constraints tend to get better performance (not always, you need to test). I kind of believe it will not work, due to the complex handling of presenceOf constraints. Try to keep that simple. My model has not a single "!presenceOf" for example.
+- Line 394-395. Will == work?
+- You have no alternative constraint for setup intervals?
+- Line 214-217. You may need to rethink this.
+- How are initial products in storage tanks handled? I believe they are not.
+- You are well advised to consider using search phases. This works well for my model:
+  var f = cp.factory;
+  cp.setSearchPhases(f.searchPhase(resources));
+- If you get a working model, you may want to think about symmetry breaking (completely the same demands) and inspired by that dominance rules.
