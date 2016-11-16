@@ -2,8 +2,6 @@
 	<version>1.0</version>
 	<configs>
 		<config category="opl" default="false" name="Instance0">
-			<ref name="Ass2.mod" type="model">
-			</ref>
 			<ref name="Ass2.ops" type="setting">
 			</ref>
 			<ref name="Instance0.dat" type="data">
@@ -11,8 +9,6 @@
 		</config>
 		<config category="opl" default="false" name="Instance1">
 			<ref name="Instance1.dat" type="data">
-			</ref>
-			<ref name="Ass2.mod" type="model">
 			</ref>
 			<ref name="Ass2.ops" type="setting">
 			</ref>
@@ -28,13 +24,9 @@
 			</ref>
 			<ref name="Ass2.mod" type="model">
 			</ref>
-			<ref name="Ass2.ops" type="setting">
-			</ref>
 		</config>
 		<config category="opl" default="false" name="Instance2">
 			<ref name="Ass2.ops" type="setting">
-			</ref>
-			<ref name="Ass2.mod" type="model">
 			</ref>
 			<ref name="Instance2.dat" type="data">
 			</ref>
@@ -44,12 +36,8 @@
 			</ref>
 			<ref name="Ass2.ops" type="setting">
 			</ref>
-			<ref name="Ass2.mod" type="model">
-			</ref>
 		</config>
 		<config category="opl" default="false" name="foodTankSetup1">
-			<ref name="Ass2.mod" type="model">
-			</ref>
 			<ref name="Ass2.ops" type="setting">
 			</ref>
 			<ref name="foodTankSetup1.dat" type="data">
@@ -57,6 +45,12 @@
 		</config>
 		<config category="opl" default="true" name="test">
 			<ref name="test.mod" type="model">
+			</ref>
+		</config>
+		<config category="opl" default="false" name="run1">
+			<ref name="test2.mod" type="model">
+			</ref>
+			<ref name="Instance0.dat" type="data">
 			</ref>
 		</config>
 	</configs>
