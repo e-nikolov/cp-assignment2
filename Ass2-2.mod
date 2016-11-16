@@ -199,17 +199,21 @@ dvar interval productionSheduleSetupIntervals[<dem, st, alt> in ProductionSchedu
 //              : res.resourceId == alt.resourceId && res.setupMatrixId != "NULL") 
 //              item(Setups, <res.setupMatrixId, p1,p2>).setupTime, 0); //maybe calculate it better?
 
+// dvar sequence setupResources[setRes in SetupResources] in
+//     all (dem in Demands, st in Steps, alt in Alternatives
+//         : setRes.setupResourceId == st.setupResourceId && st.stepId == alt.stepId 
+//           && dem.productId == item(Steps, <alt.stepId>).productId)
+//             productionSheduleSetupIntervals[<dem, st, alt>];
 dvar sequence setupResources[setRes in SetupResources] in
-    all (dem in Demands, st in Steps, alt in Alternatives
-        : setRes.setupResourceId == st.setupResourceId && st.stepId == alt.stepId 
-          && dem.productId == item(Steps, <alt.stepId>).productId)
-            productionSheduleSetupIntervals[<dem, st, alt>];
+    all(<dem, st, alt> in ProductionScheduleSet
+            : setRes.setupResourceId == st.setupResourceId)
+                productionSheduleSetupIntervals[<dem, st, alt>];
 
 dvar int productionScheduleSetupCost[<dem, st, alt> in ProductionScheduleSet]; 
 
 //                   Storage tanks
 
-// get the stepID's of steps that are first. The storage before these steps will be 0 0 0.
+// get the stepID's of steps that are last. The storage after these steps will be 0 0 0.
 {string} stepIDs = union(st in Steps) {st.stepId};
 //{string} stepsWithPredecessorIDs = union(pr in Precedences) {pr.successorId};
 {string} stepsWithSuccessorIDs = union(pr in Precedences) {pr.predecessorId};
@@ -251,7 +255,8 @@ dvar interval storageAfterProdStepAlternatives[<demand, step, storProd> in Stora
     in 0..demand.deliveryMax
     size item(StorageTimeBounds[step.stepId], <step.stepId>).minTime 
          .. 
-         minl(item(StorageTimeBounds[step.stepId], <step.stepId>).maxTime, maxDemandStoreTime[demand]);    
+         item(StorageTimeBounds[step.stepId], <step.stepId>).maxTime;
+         //minl(item(StorageTimeBounds[step.stepId], <step.stepId>).maxTime, maxDemandStoreTime[demand]);    
 
 {TransitionMatrixItem} setupTimesStorage[t in StorageTanks] =
     {<p1, p2, time> | <t.setupMatrixId, p1, p2, time, cost> in Setups};
@@ -314,6 +319,8 @@ dexpr float WeightedSetupCost =
 
 dexpr float TotalCost = WeightedTardinessCost + WeightedNonDeliveryCost + WeightedProcessingCost + WeightedSetupCost;
 
+//todo assert that the everything in StorageProduction is according to Precedence, that there is nothing funny going on.
+
 execute {
     cp.param.Workers = 1;
 //  cp.param.TimeLimit = Opl.card(Demands)*10;
@@ -337,26 +344,25 @@ minimize
 subject to {
     // Making sure the unimportnat intervals are not cousing any useless test cases
     // every setup for a step who's resource has no setup goes to 0. the cost too.
-    forall(<dem, st, alt> in ProductionScheduleSet, res in Resources 
-            : res.setupMatrixId == "NULL" && res.resourceId == alt.resourceId) {
-                        
-        !presenceOf(productionSheduleSetupIntervals[<dem, st, alt>]);
+//    forall(<dem, st, alt> in ProductionScheduleSet, res in Resources 
+//            : res.setupMatrixId == "NULL" && res.resourceId == alt.resourceId) {               
+//        !presenceOf(productionSheduleSetupIntervals[<dem, st, alt>]);
 //      lengthOf(setupProductionStepForDemandAlternative[<dem, st, alt>]) == 0;
-        productionScheduleSetupCost[<dem, st, alt>] == 0; 
-    }
+//        productionScheduleSetupCost[<dem, st, alt>] == 0; 
+//    }
     
     //end of the last steps must be after the mindeliverytime.
     forall(<dem, st> in ProductionStepForDemandsSet : st.stepId in endingStepsIDs)
-        presenceOf(productionStepIntervals[<dem, st>]) => (endOf(productionStepIntervals[<dem, st>]) >= dem.deliveryMin);
+        endOf(productionStepIntervals[<dem, st>], dem.deliveryMin) >= dem.deliveryMin;
     
-    forall(<dem, st> in ProductionStepForDemandsSet : st.stepId in endingStepsIDs) {
-        !presenceOf(storageAfterProdStep[<dem, st>]);
-        lengthOf(storageAfterProdStep[<dem, st>]) == 0;
-    }       
-    forall(<dem, st, storProd> in StorageAfterProdStepAlternative : st.stepId in endingStepsIDs){
-        !presenceOf(storageAfterProdStepAlternatives[<dem, st, storProd>]);
-        lengthOf(storageAfterProdStepAlternatives[<dem, st, storProd>]) == 0;
-    }
+//    forall(<dem, st> in ProductionStepForDemandsSet : st.stepId in endingStepsIDs) {
+//        !presenceOf(storageAfterProdStep[<dem, st>]);
+//        lengthOf(storageAfterProdStep[<dem, st>]) == 0;
+//    }       
+//    forall(<dem, st, storProd> in StorageAfterProdStepAlternative : st.stepId in endingStepsIDs){
+//        !presenceOf(storageAfterProdStepAlternatives[<dem, st, storProd>]);
+//        lengthOf(storageAfterProdStepAlternatives[<dem, st, storProd>]) == 0;
+//    }
     
     // All setup intervals are just before the interval they precede
     forall(<dem, st, alt> in ProductionScheduleSet)
@@ -383,8 +389,8 @@ subject to {
         presenceOf(demandIntervals[dem]) == presenceOf(storageAfterProdStep[<dem, st>]);
         
 //       if a demand is not present then all the setup intervals should not be present too.
-    forall(<dem, st, alt> in ProductionScheduleSet)
-        !presenceOf(demandIntervals[dem]) => !presenceOf(productionScheduleIntervals[<dem, st, alt>]);
+//    forall(<dem, st, alt> in ProductionScheduleSet)
+//        !presenceOf(demandIntervals[dem]) => !presenceOf(productionScheduleIntervals[<dem, st, alt>]);
 
     // Every step must be one and only one of it's alternatives 
     forall(<dem, st> in ProductionStepForDemandsSet)
@@ -402,18 +408,18 @@ subject to {
         
     // setting the setup time and cost of setups before each step. 
     forall(<dem, st, alt> in ProductionScheduleSet, res in Resources:
-            res.setupMatrixId != "NULL" && res.resourceId == alt.resourceId) {
+            /*res.setupMatrixId != "NULL" && */res.resourceId == alt.resourceId) {
 
         
-        !presenceOf(productionScheduleIntervals[<dem, st, alt>]) 
-            => !presenceOf(productionScheduleIntervals[<dem, st, alt>]);
-        
-        setupLenConstraint: lengthOf(productionScheduleIntervals[<dem, st, alt>])// == 0;
-            == resourceSetupTime[res][typeOfPrev(resources[res], productionScheduleIntervals[<dem, st, alt>], res.initialProductId, -1)][dem.productId];
+//        !presenceOf(productionScheduleIntervals[<dem, st, alt>]) 
+//            => !presenceOf(productionScheduleIntervals[<dem, st, alt>]);
+//todo fix, not just comment.        
+         setupLenConstraint: lengthOf(productionScheduleIntervals[<dem, st, alt>]) >= 0;// == 0;
+        //     == resourceSetupTime[res][typeOfPrev(resources[res], productionScheduleIntervals[<dem, st, alt>], res.initialProductId, -1)][dem.productId];
 //          == stpTimes[ord(Resources, res)][typeOfPrev(resources[res], demandStepAlternative[<dem, st, alt>], res.initialProductId)][dem.productId];
-            
-        setupCostConstraint: productionScheduleSetupCost[<dem, st, alt>]//== 0;
-            == resourceSetupCost[res][typeOfPrev(resources[res], productionScheduleIntervals[<dem, st, alt>], res.initialProductId, -1)][dem.productId];
+//todo fix, not just comment.
+         setupCostConstraint: productionScheduleSetupCost[<dem, st, alt>] >= 0;//== 0;
+        //     == resourceSetupCost[res][typeOfPrev(resources[res], productionScheduleIntervals[<dem, st, alt>], res.initialProductId, -1)][dem.productId];
 //          == stpCosts[ord(Resources, res)][typeOfPrev(resources[res], demandStepAlternative[<dem, st, alt>], res.initialProductId)][dem.productId];
     }
         
