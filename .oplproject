@@ -2,9 +2,9 @@
 	<version>1.0</version>
 	<configs>
 		<config category="opl" default="false" name="Instance0">
-			<ref name="Ass2.ops" type="setting">
-			</ref>
 			<ref name="Instance0.dat" type="data">
+			</ref>
+			<ref name="Ass2-2.mod" type="model">
 			</ref>
 		</config>
 		<config category="opl" default="false" name="Instance1">
@@ -22,7 +22,7 @@
 		<config category="opl" default="false" name="foodPrecedence">
 			<ref name="foodPrecedence1.dat" type="data">
 			</ref>
-			<ref name="Ass2.mod" type="model">
+			<ref name="Ass2-2.mod" type="model">
 			</ref>
 		</config>
 		<config category="opl" default="false" name="Instance2">
@@ -38,9 +38,9 @@
 			</ref>
 		</config>
 		<config category="opl" default="false" name="foodTankSetup1">
-			<ref name="Ass2.ops" type="setting">
-			</ref>
 			<ref name="foodTankSetup1.dat" type="data">
+			</ref>
+			<ref name="Ass2-2.mod" type="model">
 			</ref>
 		</config>
 		<config category="opl" default="true" name="test">
