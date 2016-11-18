@@ -221,7 +221,7 @@ dvar int productionScheduleSetupCost[<dem, st, alt> in ProductionScheduleSet];
  
 //todo this calculation can be better. The sum of all minimum alternative of lenghths of intervals of steps. ???
 int maxDemandStoreTime[dem in Demands] = dem.deliveryMax;
-//      - sum(st in Steps) min(alt in Alternatives) where st.productId == dem.productId && alt.stepId == st.stepId;
+      //- sum(st in Steps) min(alt in Alternatives) where st.productId == dem.productId && alt.stepId == st.stepId;
 
 tuple StorageTimeBound {
     key string stepId;
@@ -229,17 +229,17 @@ tuple StorageTimeBound {
     int maxTime;
 }
 
-{StorageTimeBound} StorageTimeBounds[st in stepIDs]
-                        = {<st, pr.delayMin, pr.delayMax> | pr in Precedences : pr.predecessorId == st}
+{StorageTimeBound} StorageTimeBounds[step in stepIDs]
+                        = {<step, precedence.delayMin, precedence.delayMax> | precedence in Precedences : precedence.predecessorId == step}
                           union 
-                          {<st2, 0, 0> | st2 in endingStepsIDs : st2 == st};
+                          {<step2, 0, 0> | step2 in endingStepsIDs : step2 == step};
 
 dvar interval storageAfterProdStep[<dem, st> in ProductionStepForDemandsSet]
     optional
     in 0..dem.deliveryMax
     size item(StorageTimeBounds[st.stepId], <st.stepId>).minTime 
          .. 
-         minl(item(StorageTimeBounds[st.stepId], <st.stepId>).maxTime, maxDemandStoreTime[dem]);
+         item(StorageTimeBounds[st.stepId], <st.stepId>).maxTime;
     
 tuple StorageAfterProdStepAlternatives {
     Demand demand;
@@ -342,103 +342,35 @@ execute {
 minimize 
   TotalCost;
 subject to {
-    // Making sure the unimportnat intervals are not cousing any useless test cases
-    // every setup for a step who's resource has no setup goes to 0. the cost too.
-//    forall(<dem, st, alt> in ProductionScheduleSet, res in Resources 
-//            : res.setupMatrixId == "NULL" && res.resourceId == alt.resourceId) {               
-//        !presenceOf(productionSheduleSetupIntervals[<dem, st, alt>]);
-//      lengthOf(setupProductionStepForDemandAlternative[<dem, st, alt>]) == 0;
-//        productionScheduleSetupCost[<dem, st, alt>] == 0; 
-//    }
-    
-    //end of the last steps must be after the mindeliverytime.
-    forall(<dem, st> in ProductionStepForDemandsSet : st.stepId in endingStepsIDs)
-        endOf(productionStepIntervals[<dem, st>], dem.deliveryMin) >= dem.deliveryMin;
-    
-//    forall(<dem, st> in ProductionStepForDemandsSet : st.stepId in endingStepsIDs) {
-//        !presenceOf(storageAfterProdStep[<dem, st>]);
-//        lengthOf(storageAfterProdStep[<dem, st>]) == 0;
-//    }       
-//    forall(<dem, st, storProd> in StorageAfterProdStepAlternative : st.stepId in endingStepsIDs){
-//        !presenceOf(storageAfterProdStepAlternatives[<dem, st, storProd>]);
-//        lengthOf(storageAfterProdStepAlternatives[<dem, st, storProd>]) == 0;
-//    }
-    
-    // All setup intervals are just before the interval they precede
-    forall(<dem, st, alt> in ProductionScheduleSet)
-        endAtStart(productionScheduleIntervals[<dem, st, alt>], productionScheduleIntervals[<dem, st, alt>]);
-    
-    //fix the position of all storage intervals (their end times and start times)
-    forall(<dem, st, storProd> in StorageAfterProdStepAlternative : st.stepId in stepsWithSuccessorIDs){
-        endAtStart(storageAfterProdStepAlternatives[<dem, st, storProd>], productionStepIntervals[<dem, item(Steps, <storProd.toStepId>)>]);
-        startAtEnd(storageAfterProdStepAlternatives[<dem, st, storProd>], productionStepIntervals[<dem, st>]);
-     }
-    
-    // storages need to chose which tank to use. chose just one alternative each
-    forall(<dem, st> in ProductionStepForDemandsSet : st.stepId in stepsWithSuccessorIDs)
-        alternative(storageAfterProdStep[<dem, st>],
-            all(storProd in StorageProductions : st.stepId == storProd.fromStepId) 
-                storageAfterProdStepAlternatives[<dem, st, storProd>]);
-    
-    // If a demand is present, all the steps it requires must be present too (and vice versa)
-    forall(<dem, st> in ProductionStepForDemandsSet)
-        presenceOf(demandIntervals[dem]) == presenceOf(productionStepIntervals[<dem, st>]);
-    
-    // storage intervals are present/absent the same as their demand
-    forall(<dem, st> in ProductionStepForDemandsSet : st.stepId in stepsWithSuccessorIDs)
-        presenceOf(demandIntervals[dem]) == presenceOf(storageAfterProdStep[<dem, st>]);
-        
-//       if a demand is not present then all the setup intervals should not be present too.
-//    forall(<dem, st, alt> in ProductionScheduleSet)
-//        !presenceOf(demandIntervals[dem]) => !presenceOf(productionScheduleIntervals[<dem, st, alt>]);
+    // TODO Alternative resources for production steps
 
-    // Every step must be one and only one of it's alternatives 
-    forall(<dem, st> in ProductionStepForDemandsSet)
-        alternative(productionStepIntervals[<dem, st>], 
-            all(alt in Alternatives: alt.stepId == st.stepId) productionScheduleIntervals[<dem, st, alt>]);
-    
-    // steps using the same resource must not overlap
-    forall(res in Resources)
-        noOverlap(resources[res], setupTimesResources[res], 1);
-    
-    // tank intervals with different products and same tank should not overlap
-    forall(stT in StorageTanks, <dem, st, storProd> in StorageAfterProdStepAlternative:
-           storProd.storageTankId == stT.storageTankId)
-        alwaysEqual(tankState[stT], storageAfterProdStepAlternatives[<dem, st, storProd>], dem.productId);
-        
-    // setting the setup time and cost of setups before each step. 
-    forall(<dem, st, alt> in ProductionScheduleSet, res in Resources:
-            /*res.setupMatrixId != "NULL" && */res.resourceId == alt.resourceId) {
+    // TODO Each demand interval must span all production steps on the demand.
 
-        
-//        !presenceOf(productionScheduleIntervals[<dem, st, alt>]) 
-//            => !presenceOf(productionScheduleIntervals[<dem, st, alt>]);
-//todo fix, not just comment.        
-         setupLenConstraint: lengthOf(productionScheduleIntervals[<dem, st, alt>]) >= 0;// == 0;
-        //     == resourceSetupTime[res][typeOfPrev(resources[res], productionScheduleIntervals[<dem, st, alt>], res.initialProductId, -1)][dem.productId];
-//          == stpTimes[ord(Resources, res)][typeOfPrev(resources[res], demandStepAlternative[<dem, st, alt>], res.initialProductId)][dem.productId];
-//todo fix, not just comment.
-         setupCostConstraint: productionScheduleSetupCost[<dem, st, alt>] >= 0;//== 0;
-        //     == resourceSetupCost[res][typeOfPrev(resources[res], productionScheduleIntervals[<dem, st, alt>], res.initialProductId, -1)][dem.productId];
-//          == stpCosts[ord(Resources, res)][typeOfPrev(resources[res], demandStepAlternative[<dem, st, alt>], res.initialProductId)][dem.productId];
-    }
-        
-    // setups using the same setup resource must not overlap
-    forall(stpRes in SetupResources)
-        noOverlap(setupResources[stpRes]);
+    // TODO endBeforeStart and startBeforeEnd for minimum and -maximum delay of storage.
+
+    // TODO Each storage step needs fit exactly between the two production steps around it.
+
+    // TODO precedences between production steps on a demand.
+
+    // TODO No overlap on all intervals for a resource.
     
-    // precedence requirement for different steps on a product
-    forall(<d1, st1> in ProductionStepForDemandsSet, <d2, st2> in ProductionStepForDemandsSet, p in Precedences:
-        st1.stepId == p.predecessorId && st2.stepId == p.successorId && d1 == d2)
-        endBeforeStart(productionStepIntervals[<d1, st1>], productionStepIntervals[<d2, st2>]);
-    
-    // the steps on a product of a demand should be spanned in the demand interval
-    forall(dem in Demands)
-        span(demandIntervals[dem], all(st in Steps : dem.productId == st.productId) productionStepIntervals[<dem, st>]);
-    
-    forall(stT in StorageTanks)
-        tankCapOverTime[stT] <= stT.quantityMax;
- };     
+    // TODO No overlap on all intervals for a setup resource.
+
+    // TODO Specify the size of the setup of each productionScheduleInterval.
+
+    // TODO Specify the cost of the setup of each productionScheduleInterval.
+
+    // TODO the setup of each productionScheduleInterval needs to happen before it and also must happen after the previous interval that uses the same resource (found in the resource sequence)
+
+    // TODO A demand should be delivered after its minimum delivery time.
+
+    // TODO Step and Comul functions for each storage.
+
+
+
+
+
+};     
  
 //{DemandAssignment} demandAssignments = fill in from your decision variables.
 //{DemandAssignment} demandAssignments =
