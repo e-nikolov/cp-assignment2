@@ -106,12 +106,12 @@ tuple ProductionStepForDemand {
     Demand demand;
     Step step;
 }
-{ProductionStepForDemand} ProductionStepForDemandsSet = {<dem, st> | dem in Demands, st in Steps : dem.productId == st.productId};
+{ProductionStepForDemand} ProductionStepForDemandSet = {<dem, st> | dem in Demands, st in Steps : dem.productId == st.productId};
 
-dvar interval productionStepIntervals[<dem, st> in ProductionStepForDemandsSet] // size is taken from alternatives.
+dvar interval productionStepInterval[<dem, st> in ProductionStepForDemandSet] // size is taken from alternatives.
     optional;
 
-dvar interval demandIntervals[demand in Demands]
+dvar interval demandInterval[demand in Demands]
     optional
     in 0..demand.deliveryMax;
 
@@ -147,38 +147,29 @@ int resourceSetupTime[r in Resources][p1 in ProductIds union {-1}][p2 in Product
     sum(<r.setupMatrixId, p1, p2, time, cost> in Setups) time;
       
 //tuple AlternativeResourceForProductionStepForDemandOnDemand {
-tuple ProductionScheduleItem {
+tuple ProductionStepOnAlternativeResource {
  //how about StepsForDemand + AlternativeResourcesForStep
 //tuple StepOnAlternativeResourceForDemand {
     Demand demand;
     Step step;
     Alternative alternativeResource;
 }
-{ProductionScheduleItem} ProductionScheduleSet = 
+{ProductionStepOnAlternativeResource} ProductionStepOnAlternativeResourceSet = 
 //{StepOnAlternativeResourceForDemand} StepsOnAlternativeResourcesForDemands = 
-    {<demand, step, alternativeResource> | <demand, step> in ProductionStepForDemandsSet, alternativeResource in Alternatives
+    {<demand, step, alternativeResource> | <demand, step> in ProductionStepForDemandSet, alternativeResource in Alternatives
         : step.stepId == alternativeResource.stepId};
     
-dvar interval productionScheduleIntervals[<demand, step, alternativeResource> in ProductionScheduleSet]
+dvar interval productionStepOnAlternativeResourceInterval[<demand, step, alternativeResource> in ProductionStepOnAlternativeResourceSet]
 //dvar interval stepOnAlternativeResourceForDemandIntervals[<demand, step, alternativeResource> in StepsOnAlternativeResourcesForDemands]
     optional(1)
     in 0..demand.deliveryMax
     size ftoi(ceil(alternativeResource.fixedProcessingTime + alternativeResource.variableProcessingTime * demand.quantity));
 
-//dvar sequence resources[resource in Resources] in
-//    all (demand in Demands, step in Steps, alternativeResource in Alternatives
-//        : resource.resourceId == alternativeResource.resourceId && step.stepId == alternativeResource.stepId 
-//          && demand.productId == item(Steps, <alternativeResource.stepId>).productId)
-//            stepOnAlternativeResourceForDemandIntervals[<demand, step, alternativeResource>]
-//    types all(demand in Demands, step in Steps, alternativeResource in Alternatives
-//        : resource.resourceId == alternativeResource.resourceId && step.stepId == alternativeResource.stepId 
-//          && demand.productId == item(Steps, <alternativeResource.stepId>).productId) demand.productId; 
-
-dvar sequence resources[resource in Resources] in
-    all (<demand, step, alternativeResource> in ProductionScheduleSet:
+dvar sequence resourceScheduleIntervalSequence[resource in Resources] in
+    all (<demand, step, alternativeResource> in ProductionStepOnAlternativeResourceSet:
             resource.resourceId == alternativeResource.resourceId
-        ) productionScheduleIntervals[<demand, step, alternativeResource>]
-    types all(<demand, step, alternativeResource> in ProductionScheduleSet:
+        ) productionStepOnAlternativeResourceInterval[<demand, step, alternativeResource>]
+    types all(<demand, step, alternativeResource> in ProductionStepOnAlternativeResourceSet:
             resource.resourceId == alternativeResource.resourceId
         ) demand.productId; 
 
@@ -192,7 +183,7 @@ tuple ProductSetsInMatrix {
 {ProductSetsInMatrix} productSetsInMatrix[sid in setupMatrixIDs] 
                         = {<setup.fromState, setup.toState> | setup in Setups: setup.setupMatrixId == sid};
 
-dvar interval productionSheduleSetupIntervals[<dem, st, alt> in ProductionScheduleSet]
+dvar interval productionSheduleSetupIntervals[<dem, st, alt> in ProductionStepOnAlternativeResourceSet]
     optional(1);
 //  size 0..9999;
 //  size 0..maxl(max(res in Resources, <p1,p2> in productSetsInMatrix[res.setupMatrixId]
@@ -205,11 +196,11 @@ dvar interval productionSheduleSetupIntervals[<dem, st, alt> in ProductionSchedu
 //           && dem.productId == item(Steps, <alt.stepId>).productId)
 //             productionSheduleSetupIntervals[<dem, st, alt>];
 dvar sequence setupResources[setRes in SetupResources] in
-    all(<dem, st, alt> in ProductionScheduleSet
+    all(<dem, st, alt> in ProductionStepOnAlternativeResourceSet
             : setRes.setupResourceId == st.setupResourceId)
                 productionSheduleSetupIntervals[<dem, st, alt>];
 
-dvar int productionScheduleSetupCost[<dem, st, alt> in ProductionScheduleSet]; 
+dvar int productionStepOnAlternativeResourceSetupCost[<dem, st, alt> in ProductionStepOnAlternativeResourceSet]; 
 
 //                   Storage tanks
 
@@ -234,7 +225,7 @@ tuple StorageTimeBound {
                           union 
                           {<step2, 0, 0> | step2 in endingStepsIDs : step2 == step};
 
-dvar interval storageAfterProdStep[<dem, st> in ProductionStepForDemandsSet]
+dvar interval storageAfterProdStep[<dem, st> in ProductionStepForDemandSet]
     optional
     in 0..dem.deliveryMax
     size item(StorageTimeBounds[st.stepId], <st.stepId>).minTime 
@@ -247,7 +238,7 @@ tuple StorageAfterProdStepAlternatives {
     StorageProduction storProd;
 }   
 {StorageAfterProdStepAlternatives} StorageAfterProdStepAlternative = 
-     {<dem, st, storProd> | <dem, st> in ProductionStepForDemandsSet, storProd in StorageProductions
+     {<dem, st, storProd> | <dem, st> in ProductionStepForDemandSet, storProd in StorageProductions
      : st.stepId == storProd.fromStepId};
      
 dvar interval storageAfterProdStepAlternatives[<demand, step, storProd> in StorageAfterProdStepAlternative]
@@ -285,7 +276,7 @@ statefunction tankState[tank in StorageTanks] with setupTimesStorage[tank];
 //          dem.productId;
 
 cumulFunction tankCapOverTime[storageTank in StorageTanks] =
-        sum(<demand, step> in ProductionStepForDemandsSet, storageProduction in StorageProductions  // all storage tanks after a production step
+        sum(<demand, step> in ProductionStepForDemandSet, storageProduction in StorageProductions  // all storage tanks after a production step
             : storageProduction.storageTankId == storageTank.storageTankId && storageProduction.fromStepId == step.stepId)
                 pulse(storageAfterProdStep[<demand, step>], demand.quantity);
 
@@ -293,18 +284,18 @@ cumulFunction tankCapOverTime[storageTank in StorageTanks] =
 
 pwlFunction tardinessFees[demand in Demands] = 
                 piecewise{0->demand.due_time; demand.tardinessVariableCost}(demand.due_time, 0);
-dexpr float TardinessCost = sum(demand in Demands) endEval(demandIntervals[demand], tardinessFees[demand]);
+dexpr float TardinessCost = sum(demand in Demands) endEval(demandInterval[demand], tardinessFees[demand]);
 
 dexpr float NonDeliveryCost = sum(demand in Demands)
-                (1 - presenceOf(demandIntervals[demand])) * (demand.quantity * demand.nonDeliveryVariableCost);
+                (1 - presenceOf(demandInterval[demand])) * (demand.quantity * demand.nonDeliveryVariableCost);
 
-dexpr float ProcessingCost = sum(<demand, step, alternativeResource> in ProductionScheduleSet) 
-                presenceOf(productionScheduleIntervals[<demand, step, alternativeResource>]) *
+dexpr float ProcessingCost = sum(<demand, step, alternativeResource> in ProductionStepOnAlternativeResourceSet) 
+                presenceOf(productionStepOnAlternativeResourceInterval[<demand, step, alternativeResource>]) *
                 (alternativeResource.fixedProcessingCost + demand.quantity * alternativeResource.variableProcessingCost);
 
 //dexpr float SetupCost = 0; 
-dexpr float SetupCost = sum(<demand, step, alternativeResource> in ProductionScheduleSet)
-                            productionScheduleSetupCost[<demand, step, alternativeResource>];
+dexpr float SetupCost = sum(<demand, step, alternativeResource> in ProductionStepOnAlternativeResourceSet)
+                            productionStepOnAlternativeResourceSetupCost[<demand, step, alternativeResource>];
 //                      + sum(<dem, st, storProd> in StorageAfterProdStepAlternative)
 //                          costStorageAfterProdStepAlternatives[<dem, st, storProd>]; 
 
@@ -343,6 +334,10 @@ minimize
   TotalCost;
 subject to {
     // TODO Alternative resources for production steps
+    forall(<demand, step> in ProductionStepForDemandSet)
+        alternative(productionStepInterval[<demand, step>], 
+            all(alternativeResource in Alternatives: alternativeResource.stepId == step.stepId)
+                productionStepOnAlternativeResourceInterval[<demand, step, alternativeResource>]);
 
     // TODO Each demand interval must span all production steps on the demand.
 

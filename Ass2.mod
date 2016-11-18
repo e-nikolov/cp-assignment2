@@ -347,7 +347,7 @@ subject to {
     
     //end of the last steps must be after the mindeliverytime.
     forall(<dem, st> in ProductionStepForDemandsSet : st.stepId in endingStepsIDs)
-        presenceOf(productionStepIntervals[<dem, st>]) => (endOf(productionStepIntervals[<dem, st>]) >= dem.deliveryMin);
+        endOf(productionStepIntervals[<dem, st>], 1000000) >= dem.deliveryMin;
     
     forall(<dem, st> in ProductionStepForDemandsSet : st.stepId in endingStepsIDs) {
         !presenceOf(storageAfterProdStep[<dem, st>]);
