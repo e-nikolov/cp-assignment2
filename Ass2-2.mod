@@ -340,6 +340,18 @@ subject to {
                 productionStepOnAlternativeResourceInterval[<demand, step, alternativeResource>]);
 
     // TODO Each demand interval must span all production steps on the demand.
+    forall(demand in Demands)
+        span(demandInterval[demand], 
+            all(<demand, step> in ProductionStepForDemandSet)
+                productionStepInterval[<demand, step>]);
+
+    // Is this necessary? Does it improve performance?
+    forall(demand in Demands)
+        span(demandInterval[demand],
+            all(<demand, step, alternativeResource> in ProductionStepOnAlternativeResourceSet)  
+                productionStepOnAlternativeResourceInterval[<demand, step, alternativeResource>]);
+
+    
 
     // TODO endBeforeStart and startBeforeEnd for minimum and -maximum delay of storage.
 
