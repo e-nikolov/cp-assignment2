@@ -317,6 +317,10 @@ execute {
 //  cp.param.TimeLimit = Opl.card(Demands)*10;
     cp.param.TimeLimit = Opl.card(Demands);
     
+
+  var f = cp.factory;
+  cp.setSearchPhases(f.searchPhase(resourceScheduleIntervalSequence));
+
 //  for(var res in Resources)
 //      for(var t in setupTimesResources[res])
 //          stpTimes[Opl.ord(Resources, res)][t.prod1][t.prod2] = t.value;
@@ -345,20 +349,41 @@ subject to {
             all(<demand, step> in ProductionStepForDemandSet)
                 productionStepInterval[<demand, step>]);
 
-    // Is this necessary? Does it improve performance?
+    // ???? Is this necessary? Does it improve performance?
     forall(demand in Demands)
         span(demandInterval[demand],
             all(<demand, step, alternativeResource> in ProductionStepOnAlternativeResourceSet)  
                 productionStepOnAlternativeResourceInterval[<demand, step, alternativeResource>]);
-
     
-
+    // TODO precedences between production steps on a demand.
     // TODO endBeforeStart and startBeforeEnd for minimum and -maximum delay of storage.
+    forall
+        (
+            precedence in Precedences,
+            <demand, prevStep> in ProductionStepForDemandSet,
+            <demand, nextStep> in ProductionStepForDemandSet : 
+                prevStep.stepId == precedence.predecessorId &&
+                nextStep.stepId == precedence.successorId
+        )
+    {
+        // Enforce precedences and min/max delay between them.
+        endBeforeStart(productionStepInterval[<demand, prevStep>], productionStepInterval[<demand, nextStep>], precedence.delayMin);
+        startBeforeEnd(productionStepInterval[<demand, nextStep>], productionStepInterval[<demand, prevStep>], -precedence.delayMax);
+
+        // The intervals for all production steps for a demand must have the same presence value.
+        presenceOf(productionStepInterval[<demand, prevStep>]) == presenceOf(productionStepInterval[<demand, nextStep>]);
+
+
+        // TODO add storages between each 2 successive production steps
+    }
+
+    // ???? Should we have another constraint for all precedences of alternative resources?
+
+
 
     // TODO Each storage step needs fit exactly between the two production steps around it.
 
-    // TODO precedences between production steps on a demand.
-
+    
     // TODO No overlap on all intervals for a resource.
     
     // TODO No overlap on all intervals for a setup resource.
