@@ -183,7 +183,7 @@ tuple ProductSetsInMatrix {
 {ProductSetsInMatrix} productSetsInMatrix[sid in setupMatrixIDs] 
                         = {<setup.fromState, setup.toState> | setup in Setups: setup.setupMatrixId == sid};
 
-dvar interval productionSheduleSetupIntervals[<dem, st, alt> in ProductionStepOnAlternativeResourceSet]
+dvar interval productionStepSetupInterval[<demand, step> in ProductionStepForDemandSet]
     optional(1);
 //  size 0..9999;
 //  size 0..maxl(max(res in Resources, <p1,p2> in productSetsInMatrix[res.setupMatrixId]
@@ -196,9 +196,9 @@ dvar interval productionSheduleSetupIntervals[<dem, st, alt> in ProductionStepOn
 //           && dem.productId == item(Steps, <alt.stepId>).productId)
 //             productionSheduleSetupIntervals[<dem, st, alt>];
 dvar sequence setupResources[setRes in SetupResources] in
-    all(<dem, st, alt> in ProductionStepOnAlternativeResourceSet
+    all(<dem, st> in ProductionStepForDemandSet
             : setRes.setupResourceId == st.setupResourceId)
-                productionSheduleSetupIntervals[<dem, st, alt>];
+                productionStepSetupInterval[<dem, st>];
 
 dvar int productionStepOnAlternativeResourceSetupCost[<dem, st, alt> in ProductionStepOnAlternativeResourceSet]; 
 
@@ -225,6 +225,7 @@ tuple StorageTimeBound {
                           union 
                           {<step2, 0, 0> | step2 in endingStepsIDs : step2 == step};
 
+// TODO replace with storage for each precedence
 dvar interval storageAfterProdStep[<dem, st> in ProductionStepForDemandSet]
     optional
     in 0..dem.deliveryMax
@@ -349,7 +350,7 @@ subject to {
             all(<demand, step> in ProductionStepForDemandSet)
                 productionStepInterval[<demand, step>]);
 
-    // ???? Is this necessary? Does it improve performance?
+    // ???? Is this necessary? Does it improve performance? Test it!
     forall(demand in Demands)
         span(demandInterval[demand],
             all(<demand, step, alternativeResource> in ProductionStepOnAlternativeResourceSet)  
@@ -381,8 +382,8 @@ subject to {
 
 
 
-    // TODO Each storage step needs fit exactly between the two production steps around it.
-
+    // TODO Each storage step needs to fit exactly between the two production steps around it.
+    //forall()
     
     // TODO No overlap on all intervals for a resource.
     
@@ -427,7 +428,38 @@ tuple StepAssignment {
     int endTimeSetup;
     string setupResourceId;
 };
-//{StepAssignment} stepAssignments = fill in from your decision variables.
+
+{StepAssignment} stepAssignments =
+{
+    <
+        demand.demandId, 
+        step.stepId, 
+        startOf(productionStepInterval[<demand, step>]), 
+        endOf(productionStepInterval[<demand, step>]), 
+        alternativeResource.resourceId,
+        presenceOf(productionStepOnAlternativeResourceInterval[<demand, step, alternativeResource>]) * 
+            (alternativeResource.fixedProcessingCost + (alternativeResource.variableProcessingCost * demand.quantity)),
+        
+        resourceSetupCost
+            [resource]
+            [
+                typeOfPrev(resourceScheduleIntervalSequence[resource],
+                     productionStepOnAlternativeResourceInterval[<demand, step, alternativeResource>],
+                     resource.initialProductId,
+                     -1)
+            ]
+            [demand.productId],
+
+        startOf(productionStepSetupInterval[<demand, step>]),             
+        endOf(productionStepSetupInterval[<demand, step>]),
+        step.setupResourceId
+    > | <demand, step> in ProductionStepForDemandSet,
+        <demand, step, alternativeResource> in ProductionStepOnAlternativeResourceSet,
+        resource in Resources :
+            presenceOf(productionStepOnAlternativeResourceInterval[<demand, step, alternativeResource>]) && 
+            step.stepId == alternativeResource.stepId &&
+            alternativeResource.resourceId == resource.resourceId
+};
 
 tuple StorageAssignment {
     key string demandId;
@@ -439,29 +471,6 @@ tuple StorageAssignment {
 };
 
 //{StorageAssignment} storageAssignments = fill in from your decision variables.
-//{StepAssignment} stepAssignments =
-//    {<d.demandId, 
-//      st.stepId, 
-//      startOf(productionStepIntervals[<d, st>]), 
-//      endOf(productionStepIntervals[<d, st>]), 
-//      a.resourceId,
-//      presenceOf(productionStepOnAlternatives[<d, a>]) * (a.fixedProcCost + (a.variableProcCost * d.quantity)),
-//      setupCostArray[r]
-//                 [typeOfPrev(resources[r],
-//                             productionStepsOnAlternatives[<d, a>],
-//                             r.initialProductId,
-//                             -1)]
-//                 [d.productId],
-//    startOf(setupSteps[<d, st>]),             
-//    endOf(setupSteps[<d, st>]),
-//    st.setupResourceId
-//
-//    >
-//    | <d, st> in ProductionStepForDemandsSet, <d, a> in DemandAlternatives, r in Resources
-//    : presenceOf(productionStepIntervalsOnAlternatives[<d, a>]) && 
-//     st.stepId == a.stepId &&
-//     a.resourceId == r.resourceId
-//    };
 
 
 execute {
