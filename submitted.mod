@@ -301,8 +301,8 @@ dexpr float TotalCost = WeightedTardinessCost + WeightedNonDeliveryCost + Weight
 
 execute {
 	cp.param.Workers = 1;
-//	cp.param.TimeLimit = Opl.card(Demands)*10;
-	cp.param.TimeLimit = Opl.card(Demands);
+	cp.param.TimeLimit = Opl.card(Demands)*100;
+//	cp.param.TimeLimit = Opl.card(Demands);
 	
 //	for(var res in Resources)
 //		for(var t in setupTimesResources[res])
@@ -391,15 +391,15 @@ subject to {
 	forall(<<dem,st>,alt> in DemandStepAlternative, res in Resources 
 					: res.setupMatrixId != "NULL" && res.resourceId == alt.resourceId) {
 		
-		!presenceOf(demandStepAlternative[<<dem,st>,alt>]) 
-			=> !presenceOf(setupDemandStepAlternative[<<dem,st>,alt>]);
+		presenceOf(demandStepAlternative[<<dem,st>,alt>]) 
+			== presenceOf(setupDemandStepAlternative[<<dem,st>,alt>]);
 		
 		setupLenConstraint: lengthOf(setupDemandStepAlternative[<<dem,st>,alt>])// == 0;
-			== resSetupTime[res][typeOfPrev(resources[res], demandStepAlternative[<<dem,st>,alt>], res.initialProductId)][dem.productId];
+			== resSetupTime[res][typeOfPrev(resources[res], demandStepAlternative[<<dem,st>,alt>], res.initialProductId, -1)][dem.productId];
 //			== stpTimes[ord(Resources, res)][typeOfPrev(resources[res], demandStepAlternative[<<dem,st>,alt>], res.initialProductId)][dem.productId];
 			
 		setupCostConstraint: costSetupDemandeStepAlternative[<<dem,st>,alt>]//== 0;
-			== resSetupCost[res][typeOfPrev(resources[res], demandStepAlternative[<<dem,st>,alt>], res.initialProductId)][dem.productId];
+			== resSetupCost[res][typeOfPrev(resources[res], demandStepAlternative[<<dem,st>,alt>], res.initialProductId, -1)][dem.productId];
 //			== stpCosts[ord(Resources, res)][typeOfPrev(resources[res], demandStepAlternative[<<dem,st>,alt>], res.initialProductId)][dem.productId];
   	}
 	    

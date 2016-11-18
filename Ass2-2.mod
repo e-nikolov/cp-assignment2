@@ -396,7 +396,7 @@ subject to {
 
     // TODO A demand should be delivered after its minimum delivery time.
 
-    // TODO Step and Comul functions for each storage.
+    // TODO Step and Cumul functions for each storage.
 
 
 
