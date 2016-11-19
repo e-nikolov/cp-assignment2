@@ -1,0 +1,11 @@
+Can some precedences have no storage?
+2 steps without a storage in between?
+
+If a storage is full with product 1, and a processing step before it produces product 2, but the
+following processing step can immediately consume product 2, is it allowed to send the product 
+to the following step without having to store product 2, or replace product 1.
+
+What does this mean:
+You have no alternative constraint for setup intervals?
+
+Setup intervals need to end at the start of the following step

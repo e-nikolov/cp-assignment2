@@ -74,9 +74,9 @@ tuple Alternative {
 {Alternative} Alternatives = ...;
 
 tuple StorageProduction {
-    key string fromStepId;
+    key string prevStepId;
     key string storageTankId;
-    string toStepId;
+    string nextStepId;
 }
 {StorageProduction} StorageProductions = ...;
 
@@ -99,21 +99,52 @@ tuple CriterionWeight {
 //                              End of input data
 
 
-
-
+dvar interval demandInterval[demand in Demands]
+    optional
+    in 0..demand.deliveryMax;
 
 tuple ProductionStepForDemand {
     Demand demand;
     Step step;
 }
-{ProductionStepForDemand} ProductionStepForDemandSet = {<dem, st> | dem in Demands, st in Steps : dem.productId == st.productId};
 
-dvar interval productionStepInterval[<dem, st> in ProductionStepForDemandSet] // size is taken from alternatives.
+{ProductionStepForDemand} ProductionStepForDemandSet =
+    {
+        <demand, step> |
+        demand in Demands, 
+        step in Steps :
+            demand.productId == step.productId
+    };
+
+dvar interval productionStepInterval[<demand, step> in ProductionStepForDemandSet] // size is taken from alternatives.
     optional;
 
-dvar interval demandInterval[demand in Demands]
-    optional
-    in 0..demand.deliveryMax;
+tuple AlternativeResourceForProductionStep {
+    Demand demand;
+    Step step;
+    Alternative alternativeResource;
+}
+
+{AlternativeResourceForProductionStep} AlternativeResourceForProductionStepSet = 
+    {
+        <demand, step, alternativeResource> | 
+        <demand, step> in ProductionStepForDemandSet,
+        alternativeResource in Alternatives:
+            step.stepId == alternativeResource.stepId
+    };
+    
+dvar interval alternativeResourceForProductionStepInterval[<demand, step, alternativeResource> in AlternativeResourceForProductionStepSet]
+    optional(1)
+    in 0..demand.deliveryMax
+    size ftoi(ceil(alternativeResource.fixedProcessingTime + alternativeResource.variableProcessingTime * demand.quantity));
+
+dvar sequence resourceScheduleIntervalSequence[resource in Resources] in
+    all (<demand, step, alternativeResource> in AlternativeResourceForProductionStepSet:
+            resource.resourceId == alternativeResource.resourceId
+        ) alternativeResourceForProductionStepInterval[<demand, step, alternativeResource>]
+    types all(<demand, step, alternativeResource> in AlternativeResourceForProductionStepSet:
+            resource.resourceId == alternativeResource.resourceId
+        ) demand.productId; 
 
 {int} ProductIds = union(p in Products) {p.productId};
 
@@ -124,7 +155,7 @@ tuple TransitionMatrixItem {
 }; 
 
 int maxResTime = max(s in Setups) s.setupTime;
-{TransitionMatrixItem} setupTimesResources[res in Resources] =
+{TransitionMatrixItem} resourceTransitionTimes[res in Resources] =
     {<p1, p2, t> | p1, p2 in ProductIds, stp in Setups, t in 0..maxResTime
         : stp.fromState == p1 && stp.toState == p2 
             && stp.setupMatrixId == res.setupMatrixId && t == stp.setupTime};
@@ -146,33 +177,6 @@ int resourceSetupCost[r in Resources][p1 in ProductIds union {-1}][p2 in Product
 int resourceSetupTime[r in Resources][p1 in ProductIds union {-1}][p2 in ProductIds] =
     sum(<r.setupMatrixId, p1, p2, time, cost> in Setups) time;
       
-//tuple AlternativeResourceForProductionStepForDemandOnDemand {
-tuple ProductionStepOnAlternativeResource {
- //how about StepsForDemand + AlternativeResourcesForStep
-//tuple StepOnAlternativeResourceForDemand {
-    Demand demand;
-    Step step;
-    Alternative alternativeResource;
-}
-{ProductionStepOnAlternativeResource} ProductionStepOnAlternativeResourceSet = 
-//{StepOnAlternativeResourceForDemand} StepsOnAlternativeResourcesForDemands = 
-    {<demand, step, alternativeResource> | <demand, step> in ProductionStepForDemandSet, alternativeResource in Alternatives
-        : step.stepId == alternativeResource.stepId};
-    
-dvar interval productionStepOnAlternativeResourceInterval[<demand, step, alternativeResource> in ProductionStepOnAlternativeResourceSet]
-//dvar interval stepOnAlternativeResourceForDemandIntervals[<demand, step, alternativeResource> in StepsOnAlternativeResourcesForDemands]
-    optional(1)
-    in 0..demand.deliveryMax
-    size ftoi(ceil(alternativeResource.fixedProcessingTime + alternativeResource.variableProcessingTime * demand.quantity));
-
-dvar sequence resourceScheduleIntervalSequence[resource in Resources] in
-    all (<demand, step, alternativeResource> in ProductionStepOnAlternativeResourceSet:
-            resource.resourceId == alternativeResource.resourceId
-        ) productionStepOnAlternativeResourceInterval[<demand, step, alternativeResource>]
-    types all(<demand, step, alternativeResource> in ProductionStepOnAlternativeResourceSet:
-            resource.resourceId == alternativeResource.resourceId
-        ) demand.productId; 
-
 //                 Setups
 {string} setupMatrixIDsNoNull = union(s in Setups) {s.setupMatrixId};
 {string} setupMatrixIDs = setupMatrixIDsNoNull union {"NULL"};
@@ -195,12 +199,13 @@ dvar interval productionStepSetupInterval[<demand, step> in ProductionStepForDem
 //         : setRes.setupResourceId == st.setupResourceId && st.stepId == alt.stepId 
 //           && dem.productId == item(Steps, <alt.stepId>).productId)
 //             productionSheduleSetupIntervals[<dem, st, alt>];
-dvar sequence setupResources[setRes in SetupResources] in
-    all(<dem, st> in ProductionStepForDemandSet
-            : setRes.setupResourceId == st.setupResourceId)
-                productionStepSetupInterval[<dem, st>];
+dvar sequence setupResourceScheduleIntervalSequence[setupResource in SetupResources] in
+    all(<demand, step> in ProductionStepForDemandSet :
+            setupResource.setupResourceId == step.setupResourceId
+       )
+            productionStepSetupInterval[<demand, step>];
 
-dvar int productionStepOnAlternativeResourceSetupCost[<dem, st, alt> in ProductionStepOnAlternativeResourceSet]; 
+dvar int setupCostOfAlternativeResourceForProductionStep[<dem, st, alt> in AlternativeResourceForProductionStepSet]; 
 
 //                   Storage tanks
 
@@ -214,42 +219,60 @@ dvar int productionStepOnAlternativeResourceSetupCost[<dem, st, alt> in Producti
 int maxDemandStoreTime[dem in Demands] = dem.deliveryMax;
       //- sum(st in Steps) min(alt in Alternatives) where st.productId == dem.productId && alt.stepId == st.stepId;
 
-tuple StorageTimeBound {
-    key string stepId;
-    int minTime;
-    int maxTime;
+	
+// TODO replace with storage for each precedence
+// A storage step happens between 2 consecutive production steps and is therefore
+// characterized by them
+tuple StorageStepForDemand {
+    Demand demand;
+    Step prevStep;
+    Step nextStep;
+    Precedence precedence;
 }
 
-{StorageTimeBound} StorageTimeBounds[step in stepIDs]
-                        = {<step, precedence.delayMin, precedence.delayMax> | precedence in Precedences : precedence.predecessorId == step}
-                          union 
-                          {<step2, 0, 0> | step2 in endingStepsIDs : step2 == step};
+{StorageStepForDemand} StorageStepForDemandSet = 
+    {
+        <demand, prevStep, nextStep, precedence> | 
 
-// TODO replace with storage for each precedence
-dvar interval storageAfterProdStep[<dem, st> in ProductionStepForDemandSet]
-    optional
-    in 0..dem.deliveryMax
-    size item(StorageTimeBounds[st.stepId], <st.stepId>).minTime 
-         .. 
-         item(StorageTimeBounds[st.stepId], <st.stepId>).maxTime;
-    
-tuple StorageAfterProdStepAlternatives {
-    Demand demand;
-    Step step;
-    StorageProduction storProd;
-}   
-{StorageAfterProdStepAlternatives} StorageAfterProdStepAlternative = 
-     {<dem, st, storProd> | <dem, st> in ProductionStepForDemandSet, storProd in StorageProductions
-     : st.stepId == storProd.fromStepId};
-     
-dvar interval storageAfterProdStepAlternatives[<demand, step, storProd> in StorageAfterProdStepAlternative]
+        <demand, prevStep> in ProductionStepForDemandSet,
+        <demand, nextStep> in ProductionStepForDemandSet,
+        precedence in Precedences :
+            prevStep.stepId == precedence.predecessorId &&
+            nextStep.stepId == precedence.successorId
+    };
+
+dvar interval storageStepInterval[<demand, prevStep, nextStep, precedence> in StorageStepForDemandSet] // size is taken from alternatives.
     optional
     in 0..demand.deliveryMax
-    size item(StorageTimeBounds[step.stepId], <step.stepId>).minTime 
-         .. 
-         item(StorageTimeBounds[step.stepId], <step.stepId>).maxTime;
-         //minl(item(StorageTimeBounds[step.stepId], <step.stepId>).maxTime, maxDemandStoreTime[demand]);    
+    size precedence.delayMin
+         ..
+         precedence.delayMax;
 
+tuple AlternativeTankForStorageStep {
+    key Demand demand;
+    key Step prevStep;
+    key Step nextStep;
+    key Precedence precedence;
+    StorageProduction alternativeTank;
+}
+
+{AlternativeTankForStorageStep} AlternativeTankForStorageStepSet = 
+    {
+        <demand, prevStep, nextStep, precedence, alternativeTank> | 
+
+        <demand, prevStep, nextStep, precedence> in StorageStepForDemandSet,
+        alternativeTank in StorageProductions : // StorageProductions ~= AlternativeTanks
+            alternativeTank.prevStepId == prevStep.stepId &&
+            alternativeTank.nextStepId == nextStep.stepId
+    };
+
+dvar interval alternativeTankForStorageStepInterval[<demand, prevStep, nextStep, precedence, alternativeTank> in AlternativeTankForStorageStepSet]
+    optional
+    in 0..demand.deliveryMax
+    size precedence.delayMin
+         ..
+         precedence.delayMax;
+     
 {TransitionMatrixItem} setupTimesStorage[t in StorageTanks] =
     {<p1, p2, time> | <t.setupMatrixId, p1, p2, time, cost> in Setups};
 //  {<stp.fromState, stp.toState, stp.setupTime> 
@@ -276,10 +299,12 @@ statefunction tankState[tank in StorageTanks] with setupTimesStorage[tank];
 //                  : storProd.storageTankId == t.storageTankId)
 //          dem.productId;
 
-cumulFunction tankCapOverTime[storageTank in StorageTanks] =
-        sum(<demand, step> in ProductionStepForDemandSet, storageProduction in StorageProductions  // all storage tanks after a production step
-            : storageProduction.storageTankId == storageTank.storageTankId && storageProduction.fromStepId == step.stepId)
-                pulse(storageAfterProdStep[<demand, step>], demand.quantity);
+// ???? is this correct??
+cumulFunction tankStoredAmountOverTime[tank in StorageTanks] =
+        sum(<demand, prevStep, nextStep, precedence, alternativeTank> in AlternativeTankForStorageStepSet :  // all storage tanks available for a storage step
+                alternativeTank.storageTankId == tank.storageTankId
+           //) pulse(storageStepInterval[<demand, prevStep, nextStep, precedence>], demand.quantity);
+           ) pulse(alternativeTankForStorageStepInterval[<demand, prevStep, nextStep, precedence, alternativeTank>], demand.quantity);
 
 //                       COSTS
 
@@ -290,13 +315,13 @@ dexpr float TardinessCost = sum(demand in Demands) endEval(demandInterval[demand
 dexpr float NonDeliveryCost = sum(demand in Demands)
                 (1 - presenceOf(demandInterval[demand])) * (demand.quantity * demand.nonDeliveryVariableCost);
 
-dexpr float ProcessingCost = sum(<demand, step, alternativeResource> in ProductionStepOnAlternativeResourceSet) 
-                presenceOf(productionStepOnAlternativeResourceInterval[<demand, step, alternativeResource>]) *
+dexpr float ProcessingCost = sum(<demand, step, alternativeResource> in AlternativeResourceForProductionStepSet) 
+                presenceOf(alternativeResourceForProductionStepInterval[<demand, step, alternativeResource>]) *
                 (alternativeResource.fixedProcessingCost + demand.quantity * alternativeResource.variableProcessingCost);
 
 //dexpr float SetupCost = 0; 
-dexpr float SetupCost = sum(<demand, step, alternativeResource> in ProductionStepOnAlternativeResourceSet)
-                            productionStepOnAlternativeResourceSetupCost[<demand, step, alternativeResource>];
+dexpr float SetupCost = sum(<demand, step, alternativeResource> in AlternativeResourceForProductionStepSet)
+                            setupCostOfAlternativeResourceForProductionStep[<demand, step, alternativeResource>];
 //                      + sum(<dem, st, storProd> in StorageAfterProdStepAlternative)
 //                          costStorageAfterProdStepAlternatives[<dem, st, storProd>]; 
 
@@ -321,19 +346,6 @@ execute {
 
   var f = cp.factory;
   cp.setSearchPhases(f.searchPhase(resourceScheduleIntervalSequence));
-
-//  for(var res in Resources)
-//      for(var t in setupTimesResources[res])
-//          stpTimes[Opl.ord(Resources, res)][t.prod1][t.prod2] = t.value;
-//          
-//  for(var res in Resources)
-//      for(var c in setupCostsResources[res])
-//          stpCosts[Opl.ord(Resources, res)][c.prod1][c.prod2] = c.value;
-    
-//  for(var tank in StorageTanks)
-//      for(var c in setupCostsStorage[tank])
-//          storageSetupCosts[Opl.ord(StorageTanks, tank)][c.prod1][c.prod2] = c.value;
-
 }
 minimize 
   TotalCost;
@@ -342,7 +354,17 @@ subject to {
     forall(<demand, step> in ProductionStepForDemandSet)
         alternative(productionStepInterval[<demand, step>], 
             all(alternativeResource in Alternatives: alternativeResource.stepId == step.stepId)
-                productionStepOnAlternativeResourceInterval[<demand, step, alternativeResource>]);
+                alternativeResourceForProductionStepInterval[<demand, step, alternativeResource>]);
+
+    // TODO Alternative storages between production steps
+    forall(<demand, prevStep, nextStep, precedence> in StorageStepForDemandSet)
+        alternative(storageStepInterval[<demand, prevStep, nextStep, precedence>], 
+            all(alternativeTank in StorageProductions :
+                    alternativeTank.prevStepId == prevStep.stepId &&
+                    alternativeTank.nextStepId == nextStep.stepId
+               ) alternativeTankForStorageStepInterval[<demand, prevStep, nextStep, precedence, alternativeTank>]);
+
+    // TODO Alternative setup intervals ???? what does that even mean?
 
     // TODO Each demand interval must span all production steps on the demand.
     forall(demand in Demands)
@@ -350,22 +372,19 @@ subject to {
             all(<demand, step> in ProductionStepForDemandSet)
                 productionStepInterval[<demand, step>]);
 
+    // If a demand is produced, then all production step intervals for that demand must be present.
+    forall(<demand, step> in ProductionStepForDemandSet)
+        presenceOf(demandInterval[demand]) == presenceOf(productionStepInterval[<demand, step>]);
+
     // ???? Is this necessary? Does it improve performance? Test it!
     forall(demand in Demands)
         span(demandInterval[demand],
-            all(<demand, step, alternativeResource> in ProductionStepOnAlternativeResourceSet)  
-                productionStepOnAlternativeResourceInterval[<demand, step, alternativeResource>]);
+            all(<demand, step, alternativeResource> in AlternativeResourceForProductionStepSet)  
+                alternativeResourceForProductionStepInterval[<demand, step, alternativeResource>]);
     
     // TODO precedences between production steps on a demand.
     // TODO endBeforeStart and startBeforeEnd for minimum and -maximum delay of storage.
-    forall
-        (
-            precedence in Precedences,
-            <demand, prevStep> in ProductionStepForDemandSet,
-            <demand, nextStep> in ProductionStepForDemandSet : 
-                prevStep.stepId == precedence.predecessorId &&
-                nextStep.stepId == precedence.successorId
-        )
+    forall(<demand, prevStep, nextStep, precedence> in StorageStepForDemandSet)
     {
         // Enforce precedences and min/max delay between them.
         endBeforeStart(productionStepInterval[<demand, prevStep>], productionStepInterval[<demand, nextStep>], precedence.delayMin);
@@ -374,17 +393,40 @@ subject to {
         // The intervals for all production steps for a demand must have the same presence value.
         presenceOf(productionStepInterval[<demand, prevStep>]) == presenceOf(productionStepInterval[<demand, nextStep>]);
 
-
         // TODO add storages between each 2 successive production steps
+        // TODO Each storage step needs to fit exactly between the two production steps around it.
+         endAtStart
+        (
+            productionStepInterval[<demand, prevStep>],
+            productionStepInterval[<demand, nextStep>], 
+            lengthOf(storageStepInterval[<demand, prevStep, nextStep, precedence>])
+        );
+
+        startAtEnd
+        (
+            storageStepInterval[<demand, prevStep, nextStep, precedence>],
+            productionStepInterval[<demand, prevStep>]
+        );
+
+        endAtStart
+        (
+            storageStepInterval[<demand, prevStep, nextStep, precedence>],
+            productionStepInterval[<demand, nextStep>]
+        );
+    }
+
+    forall(resource in Resources) {
+        noOverlap(resourceScheduleIntervalSequence[resource], resourceTransitionTimes[resource], 1);
+    }
+
+    // setups using the same setup resource must not overlap
+    forall(setupResource in SetupResources) {
+        noOverlap(setupResourceScheduleIntervalSequence[setupResource]);
     }
 
     // ???? Should we have another constraint for all precedences of alternative resources?
+   
 
-
-
-    // TODO Each storage step needs to fit exactly between the two production steps around it.
-    //forall()
-    
     // TODO No overlap on all intervals for a resource.
     
     // TODO No overlap on all intervals for a setup resource.
@@ -400,22 +442,15 @@ subject to {
     // TODO Step and Cumul functions for each storage.
 
 
+    forall(tank in StorageTanks)
+        tankStoredAmountOverTime[tank] <= tank.quantityMax;
+
+
 
 
 
 };     
  
-//{DemandAssignment} demandAssignments = fill in from your decision variables.
-//{DemandAssignment} demandAssignments =
-//{
-//  <d.demandId,
-//  startOf(something),
-//  endOf(something),
-//  someExpression,
-//  someOtherExpression>
-//  | d in Demands
-//};
-
 tuple StepAssignment {
     key string demandId;
     key string stepId;
@@ -437,14 +472,14 @@ tuple StepAssignment {
         startOf(productionStepInterval[<demand, step>]), 
         endOf(productionStepInterval[<demand, step>]), 
         alternativeResource.resourceId,
-        presenceOf(productionStepOnAlternativeResourceInterval[<demand, step, alternativeResource>]) * 
+        presenceOf(alternativeResourceForProductionStepInterval[<demand, step, alternativeResource>]) * 
             (alternativeResource.fixedProcessingCost + (alternativeResource.variableProcessingCost * demand.quantity)),
         
         resourceSetupCost
             [resource]
             [
                 typeOfPrev(resourceScheduleIntervalSequence[resource],
-                     productionStepOnAlternativeResourceInterval[<demand, step, alternativeResource>],
+                     alternativeResourceForProductionStepInterval[<demand, step, alternativeResource>],
                      resource.initialProductId,
                      -1)
             ]
@@ -454,9 +489,9 @@ tuple StepAssignment {
         endOf(productionStepSetupInterval[<demand, step>]),
         step.setupResourceId
     > | <demand, step> in ProductionStepForDemandSet,
-        <demand, step, alternativeResource> in ProductionStepOnAlternativeResourceSet,
+        <demand, step, alternativeResource> in AlternativeResourceForProductionStepSet,
         resource in Resources :
-            presenceOf(productionStepOnAlternativeResourceInterval[<demand, step, alternativeResource>]) && 
+            presenceOf(alternativeResourceForProductionStepInterval[<demand, step, alternativeResource>]) && 
             step.stepId == alternativeResource.stepId &&
             alternativeResource.resourceId == resource.resourceId
 };
