@@ -4,6 +4,7 @@ Can some precedences have no storage?
 If a storage is full with product 1, and a processing step before it produces product 2, but the
 following processing step can immediately consume product 2, is it allowed to send the product 
 to the following step without having to store product 2, or replace product 1.
+presenceOf(interval) == lengthOf(interval) > 0
 
 What does this mean:
 You have no alternative constraint for setup intervals?

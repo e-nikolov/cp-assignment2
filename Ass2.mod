@@ -123,11 +123,11 @@ tuple triplet {
     int value;
 }; 
 
-int maxResTime = max(s in Setups) s.setupTime;
 {triplet} setupTimesResources[res in Resources] =
-    {<p1,p2,t> | p1,p2 in ProductIds, stp in Setups, t in 0..maxResTime
-        : stp.fromState == p1 && stp.toState == p2 
-            && stp.setupMatrixId == res.setupMatrixId && t == stp.setupTime};
+    {
+    	<stp.fromState,stp.toState,stp.setupTime> | 
+   		stp in Setups : stp.setupMatrixId == res.setupMatrixId
+    };
 
 //{triplet} setupCostsResources[res in Resources] =
 //  {<p1,p2,c> | p1,p2 in ProductIds, stp in Setups, c in 0..maxint
@@ -169,14 +169,14 @@ dvar sequence resources[res in Resources] in
           && dem.productId == item(Steps, <alt.stepId>).productId) dem.productId; 
 
 //                 Setups
-{string} setupMatrixIDsNoNull = union(s in Setups) {s.setupMatrixId};
-{string} setupMatrixIDs = setupMatrixIDsNoNull union {"NULL"};
-tuple ProductSetsInMatrix {
-    int p1;
-    int p2;
-}
-{ProductSetsInMatrix} productSetsInMatrix[s in setupMatrixIDs] 
-                        = {<stp.fromState, stp.toState> | stp in Setups: stp.setupMatrixId == s};
+//{string} setupMatrixIDsNoNull = union(s in Setups) {s.setupMatrixId};
+//{string} setupMatrixIDs = setupMatrixIDsNoNull union {"NULL"};
+//tuple ProductSetsInMatrix {
+//    int p1;
+//    int p2;
+//}
+//{ProductSetsInMatrix} productSetsInMatrix[s in setupMatrixIDs] 
+//                        = {<stp.fromState, stp.toState> | stp in Setups: stp.setupMatrixId == s};
 
 dvar interval setupDemandStepAlternative[<<dem,st>,alt> in DemandStepAlternative]
     optional(1);
@@ -211,6 +211,7 @@ tuple minMaxStorageTimes {
     int maxTime;
 }
 
+// The time bounds depend both on the previous and following step, but it seems like this is only calculating it based on the previous step??
 {minMaxStorageTimes} minMaxStepStorageTime[st in stepIDs]
                         = {<st, pr.delayMin, pr.delayMax> | pr in Precedences : pr.predecessorId == st}
                           union 
@@ -264,9 +265,9 @@ statefunction tankState[stT in StorageTanks] with setupTimesStorage[stT];
 //                  : storProd.storageTankId == t.storageTankId)
 //          dem.productId;
 
-cumulFunction tankCapOverTime[stT in StorageTanks] 
-        = sum(<dem,st> in DemSteps, stPrd in StorageProductions 
-            : stPrd.storageTankId == stT.storageTankId && stPrd.prodStepId == st.stepId)
+cumulFunction tankCapOverTime[tank in StorageTanks] 
+        = sum(<dem,st> in DemSteps, alternativeTank in StorageProductions 
+            : alternativeTank.storageTankId == tank.storageTankId && alternativeTank.prodStepId == st.stepId)
                 pulse(storageAfterProdStep[<dem,st>], dem.quantity);
 
 //                       COSTS
@@ -301,8 +302,8 @@ dexpr float TotalCost = WeightedTardinessCost + WeightedNonDeliveryCost + Weight
 
 execute {
     cp.param.Workers = 1;
-    cp.param.TimeLimit = Opl.card(Demands)*100;
-//  cp.param.TimeLimit = Opl.card(Demands);
+    //cp.param.TimeLimit = Opl.card(Demands)*100;
+    cp.param.TimeLimit = Opl.card(Demands);
     
 //  for(var res in Resources)
 //      for(var t in setupTimesResources[res])
@@ -322,13 +323,13 @@ minimize
 subject to {
     // Making sure the unimportnat intervals are not cousing any useless test cases
     // every setup for a step who's resource has no setup goes to 0. the cost too.
-    forall(<<dem,st>,alt> in DemandStepAlternative, res in Resources 
-            : res.setupMatrixId == "NULL" && res.resourceId == alt.resourceId) {
+//    forall(<<dem,st>,alt> in DemandStepAlternative, res in Resources 
+//            : res.setupMatrixId == "NULL" && res.resourceId == alt.resourceId) {
                         
-        !presenceOf(setupDemandStepAlternative[<<dem,st>,alt>]);
-//      lengthOf(setupDemandStepAlternative[<<dem,st>,alt>]) == 0;
-        costSetupDemandeStepAlternative[<<dem,st>,alt>] == 0; 
-    }
+//        !presenceOf(setupDemandStepAlternative[<<dem,st>,alt>]);
+////      lengthOf(setupDemandStepAlternative[<<dem,st>,alt>]) == 0;
+//        costSetupDemandeStepAlternative[<<dem,st>,alt>] == 0; 
+//    }
     
     //end of the last steps must be after the mindeliverytime.
     forall(<dem,st> in DemSteps : st.stepId in endingStepsIDs)
@@ -366,6 +367,7 @@ subject to {
         presenceOf(demand[dem]) == presenceOf(prodSteps[<dem,st>]);
     
     // storage intervals are present/absent the same as their demand
+    // ???? what if a product doesn't need to be stored? the storage interval should not be present
     forall(<dem,st> in DemSteps : st.stepId in stepsWithSuccessorIDs)
         presenceOf(demand[dem]) == presenceOf(storageAfterProdStep[<dem,st>]);
         
@@ -389,7 +391,7 @@ subject to {
         
     // setting the setup time and cost of setups before each step. 
     forall(<<dem,st>,alt> in DemandStepAlternative, res in Resources 
-                    : res.setupMatrixId != "NULL" && res.resourceId == alt.resourceId) {
+                    : res.resourceId == alt.resourceId) {
         
         presenceOf(demandStepAlternative[<<dem,st>,alt>]) 
             == presenceOf(setupDemandStepAlternative[<<dem,st>,alt>]);
@@ -431,28 +433,28 @@ subject to {
 //  | d in Demands
 //};
 
-tuple StepAssignment {
-    key string demandId;
-    key string stepId;
-    int startTime;
-    int endTime;
-    string resourceId;
-    float procCost;
-    float setupCost;
-    int startTimeSetup;
-    int endTimeSetup;
-    string setupResourceId;
-};
+//tuple StepAssignment {
+//    key string demandId;
+//    key string stepId;
+//    int startTime;
+//    int endTime;
+//    string resourceId;
+//    float procCost;
+//    float setupCost;
+//    int startTimeSetup;
+//    int endTimeSetup;
+//    string setupResourceId;
+//};
 //{StepAssignment} stepAssignments = fill in from your decision variables.
 
-tuple StorageAssignment {
-    key string demandId;
-    key string prodStepId;
-    int startTime;
-    int endTime;
-    int quantity;
-    string storageTankId;
-};
+//tuple StorageAssignment {
+//    key string demandId;
+//    key string prodStepId;
+//    int startTime;
+//    int endTime;
+//    int quantity;
+//    string storageTankId;
+//};
 //{StorageAssignment} storageAssignments = fill in from your decision variables.
 
 execute {

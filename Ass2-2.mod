@@ -154,39 +154,16 @@ tuple TransitionMatrixItem {
     int value;
 }; 
 
-int maxResTime = max(s in Setups) s.setupTime;
-{TransitionMatrixItem} resourceTransitionTimes[res in Resources] =
-    {<p1, p2, t> | p1, p2 in ProductIds, stp in Setups, t in 0..maxResTime
-        : stp.fromState == p1 && stp.toState == p2 
-            && stp.setupMatrixId == res.setupMatrixId && t == stp.setupTime};
-
-//{TransitionMatrixItem} setupCostsResources[res in Resources] =
-//  {<p1,p2,c> | p1,p2 in ProductIds, stp in Setups, c in 0..maxint
-//      : stp.fromState == p1 && stp.toState == p2 
-//          && stp.setupMatrixId == res.setupMatrixId && c == stp.setupCost};
-
-
-//range resRange = 0..card(Resources)-1;
-//range prodRange = 0..card(ProductIds)-1;
-//int stpTimes[resRange][prodRange][prodRange] = [ r : [ p1 : [ p2: 0]] | r in resRange, p1,p2 in prodRange ];
-//int stpCosts[resRange][prodRange][prodRange] = [ r : [ p1 : [ p2: 0]] | r in resRange, p1,p2 in prodRange ];
+{TransitionMatrixItem} resourceSetupTimeTransitionMatrix[resource in Resources] =
+    {<p1, p2, time> | <resource.setupMatrixId, p1, p2, time, cost> in Setups};
 
 int resourceSetupCost[r in Resources][p1 in ProductIds union {-1}][p2 in ProductIds] =
     sum(<r.setupMatrixId, p1, p2, time, cost> in Setups) cost;
     
-int resourceSetupTime[r in Resources][p1 in ProductIds union {-1}][p2 in ProductIds] =
-    sum(<r.setupMatrixId, p1, p2, time, cost> in Setups) time;
+int resourceSetupTime[r in Resources][prevProductId in ProductIds union {-1}][nextProductId in ProductIds] =
+    sum(<r.setupMatrixId, prevProductId, nextProductId, time, cost> in Setups) time;
       
 //                 Setups
-{string} setupMatrixIDsNoNull = union(s in Setups) {s.setupMatrixId};
-{string} setupMatrixIDs = setupMatrixIDsNoNull union {"NULL"};
-tuple ProductSetsInMatrix {
-    int p1;
-    int p2;
-}
-{ProductSetsInMatrix} productSetsInMatrix[sid in setupMatrixIDs] 
-                        = {<setup.fromState, setup.toState> | setup in Setups: setup.setupMatrixId == sid};
-
 dvar interval productionStepSetupInterval[<demand, step> in ProductionStepForDemandSet]
     optional(1);
 //  size 0..9999;
@@ -194,11 +171,6 @@ dvar interval productionStepSetupInterval[<demand, step> in ProductionStepForDem
 //              : res.resourceId == alt.resourceId && res.setupMatrixId != "NULL") 
 //              item(Setups, <res.setupMatrixId, p1,p2>).setupTime, 0); //maybe calculate it better?
 
-// dvar sequence setupResources[setRes in SetupResources] in
-//     all (dem in Demands, st in Steps, alt in Alternatives
-//         : setRes.setupResourceId == st.setupResourceId && st.stepId == alt.stepId 
-//           && dem.productId == item(Steps, <alt.stepId>).productId)
-//             productionSheduleSetupIntervals[<dem, st, alt>];
 dvar sequence setupResourceScheduleIntervalSequence[setupResource in SetupResources] in
     all(<demand, step> in ProductionStepForDemandSet :
             setupResource.setupResourceId == step.setupResourceId
@@ -208,18 +180,12 @@ dvar sequence setupResourceScheduleIntervalSequence[setupResource in SetupResour
 dvar int setupCostOfAlternativeResourceForProductionStep[<dem, st, alt> in AlternativeResourceForProductionStepSet]; 
 
 //                   Storage tanks
-
-// get the stepID's of steps that are last. The storage after these steps will be 0 0 0.
-{string} stepIDs = union(st in Steps) {st.stepId};
-//{string} stepsWithPredecessorIDs = union(pr in Precedences) {pr.successorId};
-{string} stepsWithSuccessorIDs = union(pr in Precedences) {pr.predecessorId};
-{string} endingStepsIDs = stepIDs diff stepsWithSuccessorIDs;
  
 //todo this calculation can be better. The sum of all minimum alternative of lenghths of intervals of steps. ???
 int maxDemandStoreTime[dem in Demands] = dem.deliveryMax;
       //- sum(st in Steps) min(alt in Alternatives) where st.productId == dem.productId && alt.stepId == st.stepId;
 
-	
+    
 // TODO replace with storage for each precedence
 // A storage step happens between 2 consecutive production steps and is therefore
 // characterized by them
@@ -273,31 +239,10 @@ dvar interval alternativeTankForStorageStepInterval[<demand, prevStep, nextStep,
          ..
          precedence.delayMax;
      
-{TransitionMatrixItem} setupTimesStorage[t in StorageTanks] =
-    {<p1, p2, time> | <t.setupMatrixId, p1, p2, time, cost> in Setups};
-//  {<stp.fromState, stp.toState, stp.setupTime> 
-//      | stp in Setups : stp.setupMatrixId == t.setupMatrixId};
-
-//{TransitionMatrixItem} setupCostsStorage[t in StorageTanks] =
-//  {<p1, p2, cost> | <t.setupMatrixId, p1, p2, time, cost> in Setups};
-//  {<stp.fromState, stp.toState, stp.setupCost> 
-//      | stp in Setups : stp.setupMatrixId == t.setupMatrixId};
-
-
-//range tankRange = 0..card(StorageTanks)-1;
-//int storageSetupCosts[tankRange][prodRange][prodRange] = [ t : [ p1 : [ p2: 0]] | t in tankRange, p1,p2 in prodRange];
-
-//dvar int costStorageAfterProdStepAlternatives[<dem, st, storProd> in StorageAfterProdStepAlternative]; 
+{TransitionMatrixItem} tankSetupTimeTransitionMatrix[tank in StorageTanks] =
+    {<p1, p2, time> | <tank.setupMatrixId, p1, p2, time, cost> in Setups};
     
-statefunction tankState[tank in StorageTanks] with setupTimesStorage[tank];
-
-//dvar sequence storageTankSeq[t in StorageTanks]
-//      in all(<dem, st, storProd> in StorageAfterProdStepAlternative
-//                  : storProd.storageTankId == t.storageTankId)
-//          storageAfterProdStepAlternatives[<dem, st, storProd>]
-//      types all(<dem, st, storProd> in StorageAfterProdStepAlternative
-//                  : storProd.storageTankId == t.storageTankId)
-//          dem.productId;
+stateFunction tankState[tank in StorageTanks] with tankSetupTimeTransitionMatrix[tank];
 
 // ???? is this correct??
 cumulFunction tankStoredAmountOverTime[tank in StorageTanks] =
@@ -418,7 +363,7 @@ subject to {
 
     // TODO No overlap on all intervals for a resource.
     forall(resource in Resources) {
-        noOverlap(resourceScheduleIntervalSequence[resource], resourceTransitionTimes[resource], 1);
+        noOverlap(resourceScheduleIntervalSequence[resource], resourceSetupTimeTransitionMatrix[resource], 1);
     }
 
     // TODO No overlap on all intervals for a setup resource.
@@ -460,8 +405,6 @@ subject to {
                 -1
             )
         ][arfps.demand.productId];
-//          == stpTimes[ord(Resources, res)][typeOfPrev(resources[res], demandStepAlternative[<<dem,st>,alt>], res.initialProductId)][dem.productId];
-            
         setupCostConstraint:
         setupCostOfAlternativeResourceForProductionStep[arfps]//== 0;
         ==
@@ -475,7 +418,6 @@ subject to {
                 -1
             )
         ][arfps.demand.productId];
-//          == stpCosts[ord(Resources, res)][typeOfPrev(resources[res], demandStepAlternative[<<dem,st>,alt>], res.initialProductId)][dem.productId];
     }
 
     // TODO the setup of each productionScheduleInterval needs to happen before it and also must happen after the previous interval that uses the same resource (found in the resource sequence)
@@ -485,13 +427,13 @@ subject to {
     // TODO Step and Cumul functions for each storage.
 
 
+    // tank intervals with different products and same tank should not overlap
+    forall(atfss in AlternativeTankForStorageStepSet,
+            tank in StorageTanks : tank.storageTankId == atfss.alternativeTank.storageTankId)
+            alwaysEqual(tankState[tank], alternativeTankForStorageStepInterval[atfss], atfss.demand.productId);
+
     forall(tank in StorageTanks)
         tankStoredAmountOverTime[tank] <= tank.quantityMax;
-
-
-
-
-
 };     
  
 tuple StepAssignment {
