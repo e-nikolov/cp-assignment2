@@ -249,10 +249,10 @@ dvar interval storageStepInterval[<demand, prevStep, nextStep, precedence> in St
          precedence.delayMax;
 
 tuple AlternativeTankForStorageStep {
-    key Demand demand;
-    key Step prevStep;
-    key Step nextStep;
-    key Precedence precedence;
+    Demand demand;
+    Step prevStep;
+    Step nextStep;
+    Precedence precedence;
     StorageProduction alternativeTank;
 }
 
@@ -395,7 +395,7 @@ subject to {
 
         // TODO add storages between each 2 successive production steps
         // TODO Each storage step needs to fit exactly between the two production steps around it.
-         endAtStart
+        endAtStart
         (
             productionStepInterval[<demand, prevStep>],
             productionStepInterval[<demand, nextStep>], 
@@ -415,10 +415,13 @@ subject to {
         );
     }
 
+
+    // TODO No overlap on all intervals for a resource.
     forall(resource in Resources) {
         noOverlap(resourceScheduleIntervalSequence[resource], resourceTransitionTimes[resource], 1);
     }
 
+    // TODO No overlap on all intervals for a setup resource.
     // setups using the same setup resource must not overlap
     forall(setupResource in SetupResources) {
         noOverlap(setupResourceScheduleIntervalSequence[setupResource]);
@@ -427,13 +430,53 @@ subject to {
     // ???? Should we have another constraint for all precedences of alternative resources?
    
 
-    // TODO No overlap on all intervals for a resource.
     
-    // TODO No overlap on all intervals for a setup resource.
 
     // TODO Specify the size of the setup of each productionScheduleInterval.
 
     // TODO Specify the cost of the setup of each productionScheduleInterval.
+
+    // setting the setup time and cost of setups before each step. 
+    forall
+    (
+        arfps in AlternativeResourceForProductionStepSet,
+        resource in Resources : resource.resourceId == arfps.alternativeResource.resourceId
+    ) {
+        
+        presenceOf(alternativeResourceForProductionStepInterval[arfps]) 
+        == 
+        presenceOf(productionStepSetupInterval[<arfps.demand, arfps.step>]);
+        
+        setupLenConstraint: 
+        lengthOf(productionStepSetupInterval[<arfps.demand, arfps.step>])// == 0;
+        ==
+        resourceSetupTime[resource]
+        [
+            typeOfPrev
+            (
+                resourceScheduleIntervalSequence[resource],
+                alternativeResourceForProductionStepInterval[arfps],
+                resource.initialProductId,
+                -1
+            )
+        ][arfps.demand.productId];
+//          == stpTimes[ord(Resources, res)][typeOfPrev(resources[res], demandStepAlternative[<<dem,st>,alt>], res.initialProductId)][dem.productId];
+            
+        setupCostConstraint:
+        setupCostOfAlternativeResourceForProductionStep[arfps]//== 0;
+        ==
+        resourceSetupCost[resource]
+        [
+            typeOfPrev
+            (
+                resourceScheduleIntervalSequence[resource], 
+                alternativeResourceForProductionStepInterval[arfps], 
+                resource.initialProductId, 
+                -1
+            )
+        ][arfps.demand.productId];
+//          == stpCosts[ord(Resources, res)][typeOfPrev(resources[res], demandStepAlternative[<<dem,st>,alt>], res.initialProductId)][dem.productId];
+    }
 
     // TODO the setup of each productionScheduleInterval needs to happen before it and also must happen after the previous interval that uses the same resource (found in the resource sequence)
 
