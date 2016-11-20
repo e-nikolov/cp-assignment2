@@ -343,14 +343,14 @@ subject to {
         endOf(prodSteps[<dem,st>], dem.deliveryMin) >= dem.deliveryMin;
     
     // this won't be needed in the new model
-    forall(<dem,st> in DemSteps : st.stepId in endingStepsIDs) {
-        !presenceOf(storageAfterProdStep[<dem,st>]);
-        lengthOf(storageAfterProdStep[<dem,st>]) == 0;
-    }       
-    forall(<<dem,st>,storProd> in StorageAfterProdStepAlternative : st.stepId in endingStepsIDs){
-        !presenceOf(storageAfterProdStepAlternatives[<<dem,st>,storProd>]);
-        lengthOf(storageAfterProdStepAlternatives[<<dem,st>,storProd>]) == 0;
-    }
+    //forall(<dem,st> in DemSteps : st.stepId in endingStepsIDs) {
+    //    !presenceOf(storageAfterProdStep[<dem,st>]);
+    //    lengthOf(storageAfterProdStep[<dem,st>]) == 0;
+    //}       
+    //forall(<<dem,st>,storProd> in StorageAfterProdStepAlternative : st.stepId in endingStepsIDs){
+    //    !presenceOf(storageAfterProdStepAlternatives[<<dem,st>,storProd>]);
+    //    lengthOf(storageAfterProdStepAlternatives[<<dem,st>,storProd>]) == 0;
+    //}
     
     // All setup intervals are just before the interval they precede
     forall(<<dem,st>,alt> in DemandStepAlternative)
@@ -374,14 +374,14 @@ subject to {
     forall(<dem,st> in DemSteps)
         presenceOf(demand[dem]) == presenceOf(prodSteps[<dem,st>]);
     
-    // storage intervals are present/absent the same as their demand
-    // ???? what if a product doesn't need to be stored? the storage interval should not be present
+    //// storage intervals are present/absent the same as their demand
+    //// ???? what if a product doesn't need to be stored? the storage interval should not be present
 
-    // storage intervals are present/absent the same as their demand
-    forall(<dem,st> in DemSteps : st.stepId in stepsWithSuccessorIDs) {
-        //presenceOf(demand[dem]) == presenceOf(storageAfterProdStep[<dem,st>]);
-        presenceOf(storageAfterProdStep[<dem,st>]) == (lengthOf(storageAfterProdStep[<dem,st>]) > 0);  
-    }
+    //// storage intervals are present/absent the same as their demand
+    //forall(<dem,st> in DemSteps : st.stepId in stepsWithSuccessorIDs) {
+    //    //presenceOf(demand[dem]) == presenceOf(storageAfterProdStep[<dem,st>]);
+    //    presenceOf(storageAfterProdStep[<dem,st>]) == (lengthOf(storageAfterProdStep[<dem,st>]) > 0);  
+    //}
 
     //forall(<<dem,st>,storProd> in StorageAfterProdStepAlternative : st.stepId in stepsWithSuccessorIDs){
 
@@ -428,6 +428,11 @@ subject to {
                 :st1.stepId == p.predecessorId && st2.stepId == p.successorId && d1 == d2) {
         endBeforeStart(prodSteps[<d1,st1>], prodSteps[<d2,st2>], p.delayMin);
         startBeforeEnd(prodSteps[<d2,st2>], prodSteps[<d1,st1>], -p.delayMax);
+
+        endAtStart(prodSteps[<d1,st1>], prodSteps[<d2,st2>], lengthOf(storageAfterProdStep[<d1, st1>]));
+
+        //presenceOf(demand[dem]) == presenceOf(storageAfterProdStep[<dem,st>]);
+        presenceOf(storageAfterProdStep[<d1,st1>]) == (lengthOf(storageAfterProdStep[<d1,st1>]) > 0);  
     }
     
     // the steps on a product of a demand should be spanned in the demand interval
