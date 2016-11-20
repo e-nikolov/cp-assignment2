@@ -155,7 +155,7 @@ tuple DemandStepAlternatives {
         : st.stepId == alt.stepId};
     
 dvar interval demandStepAlternative[<<dem,st>,alt> in DemandStepAlternative]
-    optional(1)
+    optional
     in 0..dem.deliveryMax
     size ftoi(ceil(alt.fixedProcessingTime + alt.variableProcessingTime * dem.quantity));
 
@@ -179,7 +179,7 @@ dvar sequence resources[res in Resources] in
 //                        = {<stp.fromState, stp.toState> | stp in Setups: stp.setupMatrixId == s};
 
 dvar interval setupDemandStepAlternative[<<dem,st>,alt> in DemandStepAlternative]
-    optional(1);
+    optional;
 //  size 0..9999;
 //  size 0..maxl(max(res in Resources, <p1,p2> in productSetsInMatrix[res.setupMatrixId]
 //              : res.resourceId == alt.resourceId && res.setupMatrixId != "NULL") 
@@ -268,7 +268,7 @@ statefunction tankState[stT in StorageTanks] with setupTimesStorage[stT];
 cumulFunction tankCapOverTime[tank in StorageTanks] 
         = sum(<dem,st> in DemSteps, alternativeTank in StorageProductions 
             : alternativeTank.storageTankId == tank.storageTankId && alternativeTank.prodStepId == st.stepId)
-                pulse(storageAfterProdStep[<dem,st>], dem.quantity);
+                pulse(storageAfterProdStepAlternatives[<<dem,st>, alternativeTank>], dem.quantity);
 
 //                       COSTS
 
@@ -302,7 +302,14 @@ dexpr float TotalCost = WeightedTardinessCost + WeightedNonDeliveryCost + Weight
 
 execute {
     cp.param.Workers = 1;
-    //cp.param.TimeLimit = Opl.card(Demands)*100;
+//    cp.param.TimeLimit = 10*Opl.card(Demands);
+    
+	//cp.param.DefaultInferenceLevel = "Extended";
+	//cp.param.DefaultInferenceLevel = "Low";
+    cp.param.DefaultInferenceLevel = "Medium";
+    
+    var f = cp.factory;
+//	cp.setSearchPhases(f.searchPhase(resources));
     cp.param.TimeLimit = Opl.card(Demands);
     
 //  for(var res in Resources)
@@ -333,8 +340,9 @@ subject to {
     
     //end of the last steps must be after the mindeliverytime.
     forall(<dem,st> in DemSteps : st.stepId in endingStepsIDs)
-        presenceOf(prodSteps[<dem,st>]) => (endOf(prodSteps[<dem,st>]) >= dem.deliveryMin);
+        endOf(prodSteps[<dem,st>], dem.deliveryMin) >= dem.deliveryMin;
     
+    // this won't be needed in the new model
     forall(<dem,st> in DemSteps : st.stepId in endingStepsIDs) {
         !presenceOf(storageAfterProdStep[<dem,st>]);
         lengthOf(storageAfterProdStep[<dem,st>]) == 0;
@@ -368,12 +376,22 @@ subject to {
     
     // storage intervals are present/absent the same as their demand
     // ???? what if a product doesn't need to be stored? the storage interval should not be present
-    forall(<dem,st> in DemSteps : st.stepId in stepsWithSuccessorIDs)
-        presenceOf(demand[dem]) == presenceOf(storageAfterProdStep[<dem,st>]);
-        
+
+    // storage intervals are present/absent the same as their demand
+    forall(<dem,st> in DemSteps : st.stepId in stepsWithSuccessorIDs) {
+        //presenceOf(demand[dem]) == presenceOf(storageAfterProdStep[<dem,st>]);
+        presenceOf(storageAfterProdStep[<dem,st>]) == (lengthOf(storageAfterProdStep[<dem,st>]) > 0);  
+    }
+
+    //forall(<<dem,st>,storProd> in StorageAfterProdStepAlternative : st.stepId in stepsWithSuccessorIDs){
+
+    //    //!presenceOf(storageAfterProdStep[<dem,st>] => presenceOf(demand[dem]);
+    //    presenceOf(storageAfterProdStepAlternatives[<<dem,st>,storProd>]) == (lengthOf(storageAfterProdStepAlternatives[<<dem,st>,storProd>]) > 0);  
+    //}        
 //       if a demand is not present then all the setup intervals should not be present too.
-    forall(<<dem,st>,alt> in DemandStepAlternative)
-        !presenceOf(demand[dem]) => !presenceOf(setupDemandStepAlternative[<<dem,st>,alt>]);
+    // seems to give worse results sometimes
+    //forall(<<dem,st>,alt> in DemandStepAlternative)
+    //    !presenceOf(demand[dem]) => !presenceOf(setupDemandStepAlternative[<<dem,st>,alt>]);
 
     // Every step must be one and only one of it's alternatives 
     forall(<dem,st> in DemSteps)
@@ -384,17 +402,13 @@ subject to {
     forall(res in Resources)
         noOverlap(resources[res], setupTimesResources[res], 1);
     
-    // tank intervals with different products and same tank should not overlap
-    forall(stT in StorageTanks, <<dem,st>,storProd> in StorageAfterProdStepAlternative 
-        : storProd.storageTankId == stT.storageTankId)
-            alwaysEqual(tankState[stT], storageAfterProdStepAlternatives[<<dem,st>,storProd>], dem.productId);
         
     // setting the setup time and cost of setups before each step. 
     forall(<<dem,st>,alt> in DemandStepAlternative, res in Resources 
                     : res.resourceId == alt.resourceId) {
         
-        presenceOf(demandStepAlternative[<<dem,st>,alt>]) 
-            == presenceOf(setupDemandStepAlternative[<<dem,st>,alt>]);
+        presenceOf(setupDemandStepAlternative[<<dem,st>,alt>]) ==
+        (presenceOf(demandStepAlternative[<<dem,st>,alt>]));
         
         setupLenConstraint: lengthOf(setupDemandStepAlternative[<<dem,st>,alt>])// == 0;
             == resSetupTime[res][typeOfPrev(resources[res], demandStepAlternative[<<dem,st>,alt>], res.initialProductId, -1)][dem.productId];
@@ -411,15 +425,26 @@ subject to {
     
     // precedence requirement for different steps on a product
     forall(<d1,st1> in DemSteps, <d2,st2> in DemSteps, p in Precedences
-                :st1.stepId == p.predecessorId && st2.stepId == p.successorId && d1 == d2)
-        endBeforeStart(prodSteps[<d1,st1>], prodSteps[<d2,st2>]);
+                :st1.stepId == p.predecessorId && st2.stepId == p.successorId && d1 == d2) {
+        endBeforeStart(prodSteps[<d1,st1>], prodSteps[<d2,st2>], p.delayMin);
+        startBeforeEnd(prodSteps[<d2,st2>], prodSteps[<d1,st1>], -p.delayMax);
+    }
     
     // the steps on a product of a demand should be spanned in the demand interval
     forall(dem in Demands)
         span(demand[dem], all(st in Steps : dem.productId == st.productId) prodSteps[<dem,st>]);
     
-    forall(stT in StorageTanks)
+    // tank intervals with different products and same tank should not overlap
+    forall(stT in StorageTanks, <<dem,st>,storProd> in StorageAfterProdStepAlternative 
+        : storProd.storageTankId == stT.storageTankId) {
+            alwaysEqual(tankState[stT], storageAfterProdStepAlternatives[<<dem,st>,storProd>], dem.productId);
+            
+    }
+
+    forall(stT in StorageTanks) {
+    	CumulConstraint:
         tankCapOverTime[stT] <= stT.quantityMax;
+    }
  };     
  
 //{DemandAssignment} demandAssignments = fill in from your decision variables.

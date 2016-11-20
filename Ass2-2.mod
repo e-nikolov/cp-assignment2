@@ -322,10 +322,10 @@ subject to {
         presenceOf(demandInterval[demand]) == presenceOf(productionStepInterval[<demand, step>]);
 
     // ???? Is this necessary? Does it improve performance? Test it!
-    forall(demand in Demands)
-        span(demandInterval[demand],
-            all(<demand, step, alternativeResource> in AlternativeResourceForProductionStepSet)  
-                alternativeResourceForProductionStepInterval[<demand, step, alternativeResource>]);
+    //forall(demand in Demands)
+    //    span(demandInterval[demand],
+    //        all(<demand, step, alternativeResource> in AlternativeResourceForProductionStepSet)  
+    //            alternativeResourceForProductionStepInterval[<demand, step, alternativeResource>]);
     
     // TODO precedences between production steps on a demand.
     // TODO endBeforeStart and startBeforeEnd for minimum and -maximum delay of storage.
@@ -391,6 +391,10 @@ subject to {
         presenceOf(alternativeResourceForProductionStepInterval[arfps]) 
         == 
         presenceOf(productionStepSetupInterval[<arfps.demand, arfps.step>]);
+
+        presenceOf(alternativeResourceForProductionStepInterval[arfps])
+        ==
+        (lengthOf(alternativeResourceForProductionStepInterval[arfps]) > 0);
         
         setupLenConstraint: 
         lengthOf(productionStepSetupInterval[<arfps.demand, arfps.step>])// == 0;

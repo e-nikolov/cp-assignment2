@@ -10,3 +10,30 @@ What does this mean:
 You have no alternative constraint for setup intervals?
 
 Setup intervals need to end at the start of the following step
+
+How do we connect setupResources[] to setupDemandStepAlternative[]
+
+should the state function's alwaysEqual be aligned on left and right 
+
+how do we do initial products on storages
+
+the setup matrix might not contain all pairs, we need to set those transitions to 0 by default
+
+What happens if the setup matrix contains a non-zero transition time between 2 products of the same type?
+Do we still allow the tank to contain 2 different demands of the same product type?
+
+
+
+
+StorageStep must happen only if its duration is more than zero
+
+
+Setup of storage must happen only if the previous product in it was different
+
+
+between 2 consecutive steps, there must be minDelay time
+
+														Instance0:			
+cp.param.DefaultInferenceLevel = "Medium";				4187.5
+
+
