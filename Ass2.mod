@@ -125,8 +125,8 @@ tuple triplet {
 
 {triplet} setupTimesResources[res in Resources] =
     {
-    	<stp.fromState,stp.toState,stp.setupTime> | 
-   		stp in Setups : stp.setupMatrixId == res.setupMatrixId
+        <stp.fromState,stp.toState,stp.setupTime> | 
+        stp in Setups : stp.setupMatrixId == res.setupMatrixId
     };
 
 //{triplet} setupCostsResources[res in Resources] =
@@ -274,45 +274,45 @@ cumulFunction tankCapOverTime[tank in StorageTanks]
 
 pwlFunction tardinessFees[dem in Demands] = 
                 piecewise{0->dem.due_time; dem.tardinessVariableCost}(dem.due_time, 0);
-dexpr float TardinessCost = sum(dem in Demands) endEval(demand[dem], tardinessFees[dem]);
+dexpr float TotalTardinessCost = sum(dem in Demands) endEval(demand[dem], tardinessFees[dem]);
 
-dexpr float NonDeliveryCost = sum(dem in Demands)
+dexpr float TotalNonDeliveryCost = sum(dem in Demands)
                 (1 - presenceOf(demand[dem])) * (dem.quantity * dem.nonDeliveryVariableCost);
 
-dexpr float ProcessingCost = sum(<<dem,st>,alt> in DemandStepAlternative) 
+dexpr float TotalProcessingCost = sum(<<dem,st>,alt> in DemandStepAlternative) 
                 presenceOf(demandStepAlternative[<<dem,st>,alt>])
                 *(alt.fixedProcessingCost + dem.quantity * alt.variableProcessingCost);
 
 //dexpr float SetupCost = 0; 
-dexpr float SetupCost = sum(<<dem,st>,alt> in DemandStepAlternative)
+dexpr float TotalSetupCost = sum(<<dem,st>,alt> in DemandStepAlternative)
                             costSetupDemandeStepAlternative[<<dem,st>,alt>];
 //                      + sum(<<dem,st>,storProd> in StorageAfterProdStepAlternative)
 //                          costStorageAfterProdStepAlternatives[<<dem,st>,storProd>]; 
 
 dexpr float WeightedTardinessCost = 
-        TardinessCost * item(CriterionWeights, <"TardinessCost">).weight;
+        TotalTardinessCost * item(CriterionWeights, <"TardinessCost">).weight;
 dexpr float WeightedNonDeliveryCost = 
-        NonDeliveryCost * item(CriterionWeights, <"NonDeliveryCost">).weight;
+        TotalNonDeliveryCost * item(CriterionWeights, <"NonDeliveryCost">).weight;
 dexpr float WeightedProcessingCost =
-        ProcessingCost * item(CriterionWeights, <"ProcessingCost">).weight;
+        TotalProcessingCost * item(CriterionWeights, <"ProcessingCost">).weight;
 dexpr float WeightedSetupCost = 
-        SetupCost * item(CriterionWeights, <"SetupCost">).weight;
+        TotalSetupCost * item(CriterionWeights, <"SetupCost">).weight;
 
 dexpr float TotalCost = WeightedTardinessCost + WeightedNonDeliveryCost + WeightedProcessingCost + WeightedSetupCost;
 
 execute {
     cp.param.Workers = 1;
     
-//	cp.param.DefaultInferenceLevel = "Extended";
-//	cp.param.DefaultInferenceLevel = "Low";
+//  cp.param.DefaultInferenceLevel = "Extended";
+//  cp.param.DefaultInferenceLevel = "Low";
     cp.param.DefaultInferenceLevel = "Medium";
     
 //    cp.param.restartfaillimit = 120;
     
     var f = cp.factory;
-//	cp.setSearchPhases(f.searchPhase(resources));
-//	cp.setSearchPhases(f.searchPhase(prodSteps));
-	
+//  cp.setSearchPhases(f.searchPhase(resources));
+//  cp.setSearchPhases(f.searchPhase(prodSteps));
+    
     cp.param.TimeLimit = Opl.card(Demands);
 //    cp.param.TimeLimit = 10*Opl.card(Demands);
 }
@@ -333,7 +333,7 @@ subject to {
         lengthOf(storageAfterProdStep[<dem,st>]) == 0;
     }
            
-	//causes valid but worse solutions.
+    //causes valid but worse solutions.
 //    forall(<<dem,st>,storProd> in StorageAfterProdStepAlternative : st.stepId in endingStepsIDs){
 //        !presenceOf(storageAfterProdStepAlternatives[<<dem,st>,storProd>]);
 //        lengthOf(storageAfterProdStepAlternatives[<<dem,st>,storProd>]) == 0;
@@ -431,47 +431,92 @@ subject to {
         : storProd.storageTankId == stT.storageTankId) {
             alwaysEqual(tankState[stT], storageAfterProdStepAlternatives[<<dem,st>,storProd>], dem.productId);
     }
+//todo storage tank setup for initial product
 
+    // tank should not overfill
     forall(stT in StorageTanks) {
-    	CumulConstraint:
+        CumulConstraint:
             tankCapOverTime[stT] <= stT.quantityMax;
     }
- };     
+};     
  
-//{DemandAssignment} demandAssignments = fill in from your decision variables.
-//{DemandAssignment} demandAssignments =
-//{
-//  <d.demandId,
-//  startOf(something),
-//  endOf(something),
-//  someExpression,
-//  someOtherExpression>
-//  | d in Demands
-//};
 
-//tuple StepAssignment {
-//    key string demandId;
-//    key string stepId;
-//    int startTime;
-//    int endTime;
-//    string resourceId;
-//    float procCost;
-//    float setupCost;
-//    int startTimeSetup;
-//    int endTimeSetup;
-//    string setupResourceId;
-//};
-//{StepAssignment} stepAssignments = fill in from your decision variables.
+tuple DemandAssignment {
+    key string demandId;
+    int startTime;
+    int endTime;
+    float nonDeliveryCost;
+    float tardinessCost;
+};
 
-//tuple StorageAssignment {
-//    key string demandId;
-//    key string prodStepId;
-//    int startTime;
-//    int endTime;
-//    int quantity;
-//    string storageTankId;
-//};
-//{StorageAssignment} storageAssignments = fill in from your decision variables.
+{DemandAssignment} demandAssignments = //{};
+{
+    <
+        dem.demandId,
+        startOf(demand[dem]),
+        endOf(demand[dem]),
+        (1 - presenceOf(demand[dem])) * (dem.quantity * dem.nonDeliveryVariableCost),
+        endEval(demand[dem], tardinessFees[dem])
+    > | dem in Demands
+};
+
+tuple StepAssignment {
+   key string demandId;
+   key string stepId;
+   int startTime;
+   int endTime;
+   string resourceId;
+   float procCost;
+   float setupCost;
+   int startTimeSetup;
+   int endTimeSetup;
+   string setupResourceId;
+};
+{StepAssignment} stepAssignments =
+{
+    <
+        dem.demandId, 
+        step.stepId, 
+        startOf(prodSteps[<dem, step>]), 
+        endOf(prodSteps[<dem, step>]), 
+        alternativeResource.resourceId,
+
+        presenceOf(demandStepAlternative[<<dem, step>, alternativeResource>]) * 
+            (alternativeResource.fixedProcessingCost + (alternativeResource.variableProcessingCost * dem.quantity)),
+
+        costSetupDemandeStepAlternative[<<dem, step>, alternativeResource>],
+
+        startOf(setupDemandStepAlternative[<<dem, step>, alternativeResource>]), 
+        endOf(setupDemandStepAlternative[<<dem, step>, alternativeResource>]),
+        step.setupResourceId
+    > | <dem, step> in DemSteps,
+        <<dem, step>, alternativeResource> in DemandStepAlternative,
+        resource in Resources :
+            presenceOf(demandStepAlternative[<<dem, step>, alternativeResource>]) && 
+            step.stepId == alternativeResource.stepId &&
+            alternativeResource.resourceId == resource.resourceId
+};
+
+tuple StorageAssignment {
+   key string demandId;
+   key string prodStepId;
+   int startTime;
+   int endTime;
+   int quantity;
+   string storageTankId;
+};
+{StorageAssignment} storageAssignments = 
+{
+    <
+        dem.demandId,
+        st.stepId,
+        startOf(storageAfterProdStepAlternatives[<dem,st>]),
+        endOf(storageAfterProdStepAlternatives[<dem,st>]),
+        dem.quantity,
+        storProd.storageTankId
+    > | <dem,st> in DemSteps, storProd in StorageProductions 
+        : st.stepId == storProd.prodStepId && st.stepId in stepsWithSuccessorIDs
+};
 
 execute {
  writeln("Total Non-Delivery Cost : ", TotalNonDeliveryCost);
@@ -484,6 +529,8 @@ execute {
  writeln("Weighted Setup Cost : ", WeightedSetupCost);
  writeln("Weighted Tardiness Cost : ", WeightedTardinessCost);
  writeln();
+ // writeln("Total Weighted Cost :", TotalCost);
+ // writeln(); //todo ? shown in example output, absent from example code
  
  for(var d in demandAssignments) 
  {

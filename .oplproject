@@ -32,6 +32,8 @@
 		<config category="opl" default="false" name="foodSetup1">
 			<ref name="foodSetup1.dat" type="data">
 			</ref>
+			<ref name="Ass2.mod" type="model">
+			</ref>
 		</config>
 		<config category="opl" default="false" name="foodTankSetup1">
 			<ref name="foodTankSetup1.dat" type="data">
@@ -65,6 +67,12 @@
 			<ref name="Ass2.mod" type="model">
 			</ref>
 			<ref name="foodTankSetup2.dat" type="data">
+			</ref>
+		</config>
+		<config category="opl" default="false" name="foodTankSetup1Ass2">
+			<ref name="Ass2.mod" type="model">
+			</ref>
+			<ref name="foodTankSetup1.dat" type="data">
 			</ref>
 		</config>
 	</configs>
