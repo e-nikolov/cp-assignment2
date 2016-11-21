@@ -306,15 +306,18 @@ dexpr float TotalCost = WeightedTardinessCost + WeightedNonDeliveryCost + Weight
 execute {
     cp.param.Workers = 1;
     
-//  cp.param.DefaultInferenceLevel = "Extended";
-//  cp.param.DefaultInferenceLevel = "Low";
+//    cp.param.DefaultInferenceLevel = "Extended";
+//    cp.param.DefaultInferenceLevel = "Low";
     cp.param.DefaultInferenceLevel = "Medium";
     
-//    cp.param.restartfaillimit = 120;
+    cp.param.restartfaillimit = 100;
     
     var f = cp.factory;
 //  cp.setSearchPhases(f.searchPhase(resources));
 //  cp.setSearchPhases(f.searchPhase(prodSteps));
+//	cp.setSearchPhases(f.searchPhase(demand));
+//	cp.setSearchPhases(f.searchPhase(setupResources));
+	cp.setSearchPhases(f.searchPhase(demandStepAlternative));
     
     cp.param.TimeLimit = Opl.card(Demands);
 //    cp.param.TimeLimit = 10*Opl.card(Demands);
@@ -361,9 +364,10 @@ subject to {
                 storageAfterProdStepAlternatives[<<dem,st>,storProd>]);
     
     // if a demand is not present, there must not be any storage happening.
+    // this will be handled in the print end because it doesnt affect the other var's, it just slows the model down.
 //    forall(<dem,st> in DemSteps, storProd in StorageProductions 
 //    	: st.stepId in stepsWithSuccessorIDs && st.stepId == storProd.prodStepId)
-//          	!presenceOf(demand[dem]) => !presenceOf(storageAfterProdStepAlternatives[<<dem,st>,storProd>]); //this will be fixed in the end print.
+//          	!presenceOf(demand[dem]) => !presenceOf(storageAfterProdStepAlternatives[<<dem,st>,storProd>]); 
     
     // If a demand is present, all the steps it requires must be present too (and vice versa)
     forall(<dem,st> in DemSteps)
