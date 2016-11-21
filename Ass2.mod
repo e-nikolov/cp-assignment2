@@ -195,11 +195,12 @@ dvar int costSetupDemandeStepAlternative[<<dem,st>,alt> in DemandStepAlternative
 
 //                   Storage tanks
 
-// get the stepID's of steps that are first. The storage before these steps will be 0 0 0.
+// get the stepID's of steps that are last. The storage after these steps will be 0 0 0.
 {string} stepIDs = union(st in Steps) {st.stepId};
-//{string} stepsWithPredecessorIDs = union(pr in Precedences) {pr.successorId};
+{string} stepsWithPredecessorIDs = union(pr in Precedences) {pr.successorId};
 {string} stepsWithSuccessorIDs = union(pr in Precedences) {pr.predecessorId};
 {string} endingStepsIDs = stepIDs diff stepsWithSuccessorIDs;
+{string} startingStepsIDs = stepIDs diff stepsWithPredecessorIDs;
  
 //todo this calculation can be better. The sum of all minimum alternative of lenghths of intervals of steps. 
 int maxDemandStoreTime[dem in Demands] = dem.deliveryMax;
@@ -244,6 +245,8 @@ dvar interval storageAfterProdStepAlternatives[<<dem,st>,storProd> in StorageAft
 //  {<stp.fromState, stp.toState, stp.setupTime> 
 //      | stp in Setups : stp.setupMatrixId == t.setupMatrixId};
 
+int tankSetupTime[t in StorageTanks][p1 in ProductIds union {-1}][p2 in ProductIds] =
+    sum(<t.setupMatrixId, p1, p2, time, cost> in Setups) time;
 //{triplet} setupCostsStorage[t in StorageTanks] =
 //  {<p1, p2, cost> | <t.setupMatrixId, p1, p2, time, cost> in Setups};
 //  {<stp.fromState, stp.toState, stp.setupCost> 
@@ -358,9 +361,9 @@ subject to {
                 storageAfterProdStepAlternatives[<<dem,st>,storProd>]);
     
     // if a demand is not present, there must not be any storage happening.
-//    forall(<dem,st> in DemSteps : st.stepId in stepsWithSuccessorIDs)
-//        forall(storProd in StorageProductions : st.stepId == storProd.prodStepId)
-//          	!presenceOf(demand[dem]) => !presenceOf(storageAfterProdStepAlternatives[<<dem,st>,storProd>]); ok, this will be fixed in the end print.
+//    forall(<dem,st> in DemSteps, storProd in StorageProductions 
+//    	: st.stepId in stepsWithSuccessorIDs && st.stepId == storProd.prodStepId)
+//          	!presenceOf(demand[dem]) => !presenceOf(storageAfterProdStepAlternatives[<<dem,st>,storProd>]); //this will be fixed in the end print.
     
     // If a demand is present, all the steps it requires must be present too (and vice versa)
     forall(<dem,st> in DemSteps)
@@ -436,8 +439,14 @@ subject to {
         : storProd.storageTankId == stT.storageTankId) {
             alwaysEqual(tankState[stT], storageAfterProdStepAlternatives[<<dem,st>,storProd>], dem.productId);
     }
-//todo storage tank setup for initial product
-
+	//storages after the first steps should start after a certain setup time if such is needed.
+	forall(<dem,st> in DemSteps, storProd in StorageProductions, stT in StorageTanks
+    	: st.stepId in startingStepsIDs && st.stepId == storProd.prodStepId 
+          && stT.storageTankId == storProd.storageTankId) 
+            presenceOf(storageAfterProdStep[<dem,st>]) 
+          	  => startOf(storageAfterProdStep[<dem,st>]) 
+          		   >= tankSetupTime[stT][dem.productId][stT.initialProductId];
+	
     // tank should not overfill
     forall(stT in StorageTanks) {
         CumulConstraint:
@@ -536,8 +545,8 @@ execute {
  writeln("Weighted Setup Cost : ", WeightedSetupCost);
  writeln("Weighted Tardiness Cost : ", WeightedTardinessCost);
  writeln();
- // writeln("Total Weighted Cost :", TotalCost);
- // writeln(); //todo ? shown in example output, absent from example code
+ writeln("Total Weighted Cost :", TotalCost);
+ writeln(); // ? shown in example output, absent from example code
  
  for(var d in demandAssignments) 
  {

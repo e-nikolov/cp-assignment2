@@ -2,11 +2,12 @@
  {
     
    var models = new Array(
-		"foodPrecedence1",
-    	"instance0"
+		"foodPrecedence1"
+    	,"instance0"
     	,"instance1"
     	,"instance2"
-//    	,"instance3"
+    	,"instance3"
+    	,"instance4"
    );
    
    var solutions = new Array( models.length );
