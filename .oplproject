@@ -117,6 +117,42 @@
 			<ref name="test2.mod" type="model">
 			</ref>
 		</config>
+		<config category="opl" default="false" name="Instance3">
+			<ref name="Ass2-2.mod" type="model">
+			</ref>
+			<ref name="Instance3.dat" type="data">
+			</ref>
+		</config>
+		<config category="opl" default="false" name="Instance3Ass2">
+			<ref name="Ass2.mod" type="model">
+			</ref>
+			<ref name="Instance3.dat" type="data">
+			</ref>
+		</config>
+		<config category="opl" default="false" name="Instance3Test2">
+			<ref name="test2.mod" type="model">
+			</ref>
+			<ref name="Instance3.dat" type="data">
+			</ref>
+		</config>
+		<config category="opl" default="false" name="Instance4">
+			<ref name="Ass2-2.mod" type="model">
+			</ref>
+			<ref name="Instance4.dat" type="data">
+			</ref>
+		</config>
+		<config category="opl" default="false" name="Instance4Ass2">
+			<ref name="Ass2.mod" type="model">
+			</ref>
+			<ref name="Instance4.dat" type="data">
+			</ref>
+		</config>
+		<config category="opl" default="false" name="Instance4Test2">
+			<ref name="test2.mod" type="model">
+			</ref>
+			<ref name="Instance4.dat" type="data">
+			</ref>
+		</config>
 	</configs>
 	
 </project>

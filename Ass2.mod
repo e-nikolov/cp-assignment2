@@ -310,14 +310,14 @@ execute {
 //    cp.param.DefaultInferenceLevel = "Low";
     cp.param.DefaultInferenceLevel = "Medium";
     
-    cp.param.restartfaillimit = 200;
+    cp.param.restartfaillimit = 100;
     
     var f = cp.factory;
 //  cp.setSearchPhases(f.searchPhase(resources));
 //  cp.setSearchPhases(f.searchPhase(prodSteps));
 //	cp.setSearchPhases(f.searchPhase(demand));
 //	cp.setSearchPhases(f.searchPhase(setupResources));
-//	cp.setSearchPhases(f.searchPhase(demandStepAlternative));
+	cp.setSearchPhases(f.searchPhase(demandStepAlternative));
 //  cp.setSearchPhases(f.searchPhase(resources), f.searchPhase(prodSteps), f.searchPhase(demand));
     
     cp.param.TimeLimit = Opl.card(Demands);

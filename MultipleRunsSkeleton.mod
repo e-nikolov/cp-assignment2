@@ -3,9 +3,9 @@ main
     
 	var instances = new Array(
 //		"foodPrecedence1"
-    	"instance0"
-    	, "instance1"
-    	, "instance2"
+//    	"instance0"
+//    	, "instance1"
+    	"instance2"
 //    	, "instance3"
 //    	, "instance4"
 	);
@@ -14,7 +14,7 @@ main
    
 	var models = new Array(
 		"Ass2.mod"
-//		, "test2.mod"
+		, "test2.mod"
 	);
     
    
