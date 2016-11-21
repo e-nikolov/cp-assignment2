@@ -357,6 +357,11 @@ subject to {
             all(storProd in StorageProductions : st.stepId == storProd.prodStepId) 
                 storageAfterProdStepAlternatives[<<dem,st>,storProd>]);
     
+    // if a demand is not present, there must not be any storage happening.
+//    forall(<dem,st> in DemSteps : st.stepId in stepsWithSuccessorIDs)
+//        forall(storProd in StorageProductions : st.stepId == storProd.prodStepId)
+//          	!presenceOf(demand[dem]) => !presenceOf(storageAfterProdStepAlternatives[<<dem,st>,storProd>]); ok, this will be fixed in the end print.
+    
     // If a demand is present, all the steps it requires must be present too (and vice versa)
     forall(<dem,st> in DemSteps)
         presenceOf(demand[dem]) == presenceOf(prodSteps[<dem,st>]);
@@ -510,12 +515,14 @@ tuple StorageAssignment {
     <
         dem.demandId,
         st.stepId,
-        startOf(storageAfterProdStepAlternatives[<dem,st>]),
-        endOf(storageAfterProdStepAlternatives[<dem,st>]),
+        startOf(storageAfterProdStepAlternatives[<<dem,st>, storProd>]),
+        endOf(storageAfterProdStepAlternatives[<<dem,st>, storProd>]),
         dem.quantity,
         storProd.storageTankId
     > | <dem,st> in DemSteps, storProd in StorageProductions 
         : st.stepId == storProd.prodStepId && st.stepId in stepsWithSuccessorIDs
+          && presenceOf(storageAfterProdStepAlternatives[<<dem,st>, storProd>])
+          && presenceOf(demand[dem])
 };
 
 execute {

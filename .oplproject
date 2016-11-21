@@ -10,7 +10,7 @@
 		<config category="opl" default="false" name="Instance1">
 			<ref name="Instance1.dat" type="data">
 			</ref>
-			<ref name="Ass2.ops" type="setting">
+			<ref name="Ass2.mod" type="model">
 			</ref>
 		</config>
 		<config category="opl" default="true" name="MultipleRuns">
