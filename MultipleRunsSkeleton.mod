@@ -3,7 +3,10 @@
     
    var models = new Array(
 		"foodPrecedence1",
-    	"anotherInstance"
+    	"instance0"
+    	,"instance1"
+    	,"instance2"
+//    	,"instance3"
    );
    
    var solutions = new Array( models.length );

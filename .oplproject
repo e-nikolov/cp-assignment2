@@ -13,10 +13,8 @@
 			<ref name="Ass2.ops" type="setting">
 			</ref>
 		</config>
-		<config category="opl" default="false" name="MultipleRuns">
+		<config category="opl" default="true" name="MultipleRuns">
 			<ref name="MultipleRunsSkeleton.mod" type="model">
-			</ref>
-			<ref name="Ass2.ops" type="setting">
 			</ref>
 		</config>
 		<config category="opl" default="false" name="foodPrecedence">
@@ -26,9 +24,9 @@
 			</ref>
 		</config>
 		<config category="opl" default="false" name="Instance2">
-			<ref name="Ass2.ops" type="setting">
-			</ref>
 			<ref name="Instance2.dat" type="data">
+			</ref>
+			<ref name="Ass2.mod" type="model">
 			</ref>
 		</config>
 		<config category="opl" default="false" name="foodSetup1">
@@ -41,7 +39,7 @@
 			<ref name="Ass2-2.mod" type="model">
 			</ref>
 		</config>
-		<config category="opl" default="true" name="test">
+		<config category="opl" default="false" name="test">
 			<ref name="test.mod" type="model">
 			</ref>
 		</config>
@@ -61,6 +59,12 @@
 			<ref name="Instance1.dat" type="data">
 			</ref>
 			<ref name="Ass2.mod" type="model">
+			</ref>
+		</config>
+		<config category="opl" default="false" name="foodTankSetup2Ass2">
+			<ref name="Ass2.mod" type="model">
+			</ref>
+			<ref name="foodTankSetup2.dat" type="data">
 			</ref>
 		</config>
 	</configs>

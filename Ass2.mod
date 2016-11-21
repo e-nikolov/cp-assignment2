@@ -302,55 +302,42 @@ dexpr float TotalCost = WeightedTardinessCost + WeightedNonDeliveryCost + Weight
 
 execute {
     cp.param.Workers = 1;
-//    cp.param.TimeLimit = 10*Opl.card(Demands);
     
-	//cp.param.DefaultInferenceLevel = "Extended";
-	//cp.param.DefaultInferenceLevel = "Low";
+//	cp.param.DefaultInferenceLevel = "Extended";
+//	cp.param.DefaultInferenceLevel = "Low";
     cp.param.DefaultInferenceLevel = "Medium";
+    
+//    cp.param.restartfaillimit = 120;
     
     var f = cp.factory;
 //	cp.setSearchPhases(f.searchPhase(resources));
+//	cp.setSearchPhases(f.searchPhase(prodSteps));
+	
     cp.param.TimeLimit = Opl.card(Demands);
-    
-//  for(var res in Resources)
-//      for(var t in setupTimesResources[res])
-//          stpTimes[Opl.ord(Resources, res)][t.prod1][t.prod2] = t.value;
-//          
-//  for(var res in Resources)
-//      for(var c in setupCostsResources[res])
-//          stpCosts[Opl.ord(Resources, res)][c.prod1][c.prod2] = c.value;
-    
-//  for(var tank in StorageTanks)
-//      for(var c in setupCostsStorage[tank])
-//          storageSetupCosts[Opl.ord(StorageTanks, tank)][c.prod1][c.prod2] = c.value;
-
+//    cp.param.TimeLimit = 10*Opl.card(Demands);
 }
+
+//todo add some min total cost or smth.
+
 minimize 
   TotalCost;
 subject to {
-    // Making sure the unimportnat intervals are not cousing any useless test cases
-    // every setup for a step who's resource has no setup goes to 0. the cost too.
-//    forall(<<dem,st>,alt> in DemandStepAlternative, res in Resources 
-//            : res.setupMatrixId == "NULL" && res.resourceId == alt.resourceId) {
-                        
-//        !presenceOf(setupDemandStepAlternative[<<dem,st>,alt>]);
-////      lengthOf(setupDemandStepAlternative[<<dem,st>,alt>]) == 0;
-//        costSetupDemandeStepAlternative[<<dem,st>,alt>] == 0; 
-//    }
     
     //end of the last steps must be after the mindeliverytime.
     forall(<dem,st> in DemSteps : st.stepId in endingStepsIDs)
         endOf(prodSteps[<dem,st>], dem.deliveryMin) >= dem.deliveryMin;
     
     // this won't be needed in the new model
-    //forall(<dem,st> in DemSteps : st.stepId in endingStepsIDs) {
-    //    !presenceOf(storageAfterProdStep[<dem,st>]);
-    //    lengthOf(storageAfterProdStep[<dem,st>]) == 0;
-    //}       
-    //forall(<<dem,st>,storProd> in StorageAfterProdStepAlternative : st.stepId in endingStepsIDs){
-    //    !presenceOf(storageAfterProdStepAlternatives[<<dem,st>,storProd>]);
-    //    lengthOf(storageAfterProdStepAlternatives[<<dem,st>,storProd>]) == 0;
-    //}
+    forall(<dem,st> in DemSteps : st.stepId in endingStepsIDs) {
+        !presenceOf(storageAfterProdStep[<dem,st>]);
+        lengthOf(storageAfterProdStep[<dem,st>]) == 0;
+    }
+           
+	//causes valid but worse solutions.
+//    forall(<<dem,st>,storProd> in StorageAfterProdStepAlternative : st.stepId in endingStepsIDs){
+//        !presenceOf(storageAfterProdStepAlternatives[<<dem,st>,storProd>]);
+//        lengthOf(storageAfterProdStepAlternatives[<<dem,st>,storProd>]) == 0;
+//    }
     
     // All setup intervals are just before the interval they precede
     forall(<<dem,st>,alt> in DemandStepAlternative)
@@ -408,7 +395,7 @@ subject to {
                     : res.resourceId == alt.resourceId) {
         
         presenceOf(setupDemandStepAlternative[<<dem,st>,alt>]) ==
-        (presenceOf(demandStepAlternative[<<dem,st>,alt>]));
+            presenceOf(demandStepAlternative[<<dem,st>,alt>]);
         
         setupLenConstraint: lengthOf(setupDemandStepAlternative[<<dem,st>,alt>])// == 0;
             == resSetupTime[res][typeOfPrev(resources[res], demandStepAlternative[<<dem,st>,alt>], res.initialProductId, -1)][dem.productId];
@@ -443,12 +430,11 @@ subject to {
     forall(stT in StorageTanks, <<dem,st>,storProd> in StorageAfterProdStepAlternative 
         : storProd.storageTankId == stT.storageTankId) {
             alwaysEqual(tankState[stT], storageAfterProdStepAlternatives[<<dem,st>,storProd>], dem.productId);
-            
     }
 
     forall(stT in StorageTanks) {
     	CumulConstraint:
-        tankCapOverTime[stT] <= stT.quantityMax;
+            tankCapOverTime[stT] <= stT.quantityMax;
     }
  };     
  
@@ -488,36 +474,36 @@ subject to {
 //{StorageAssignment} storageAssignments = fill in from your decision variables.
 
 execute {
-//  writeln("Total Non-Delivery Cost : ", TotalNonDeliveryCost);
-//  writeln("Total Processing Cost : ", TotalProcessingCost);
-//  writeln("Total Setup Cost : ", TotalSetupCost);
-//  writeln("Total Tardiness Cost : ", TotalTardinessCost);
-//  writeln();
-//  writeln("Weighted Non-Delivery Cost : ",WeightedNonDeliveryCost);
-//  writeln("Weighted Processing Cost : ", WeightedProcessingCost);
-//  writeln("Weighted Setup Cost : ", WeightedSetupCost);
-//  writeln("Weighted Tardiness Cost : ", WeightedTardinessCost);
-//  writeln();
-//  
-//  for(var d in demandAssignments) 
-//  {
-//      writeln(d.demandId, ": [",  d.startTime, ",", d.endTime, "] ");
-//      writeln(" non-delivery cost: ", d.nonDeliveryCost,  ", tardiness cost: " , d.tardinessCost);
-//  }
-//  writeln();
-//  for(var sa in stepAssignments) {
-//      writeln(sa.stepId, " of ", sa.demandId,": [", sa.startTime, ",", sa.endTime, "] ","on ", sa.resourceId);
-//      write(" processing cost: ", sa.procCost);
-//      if (sa.setupCost > 0)
-//          write(", setup cost: ", sa.setupCost);
-//      writeln();
-//      if (sa.startTimeSetup < sa.endTimeSetup)
-//          writeln(" setup step: [",sa.startTimeSetup, ",", sa.endTimeSetup, "] ","on ", sa.setupResourceId);
-//  }
-//  writeln();
-//  for(var sta in storageAssignments) {
-//      if (sta.startTime < sta.endTime) {
-//          writeln(sta.prodStepId, " of ", sta.demandId," produces quantity ", sta.quantity," in storage tank ", sta.storageTankId," at time ", sta.startTime," which is consumed at time ", sta.endTime);
-//      }
-//  }
+ writeln("Total Non-Delivery Cost : ", TotalNonDeliveryCost);
+ writeln("Total Processing Cost : ", TotalProcessingCost);
+ writeln("Total Setup Cost : ", TotalSetupCost);
+ writeln("Total Tardiness Cost : ", TotalTardinessCost);
+ writeln();
+ writeln("Weighted Non-Delivery Cost : ",WeightedNonDeliveryCost);
+ writeln("Weighted Processing Cost : ", WeightedProcessingCost);
+ writeln("Weighted Setup Cost : ", WeightedSetupCost);
+ writeln("Weighted Tardiness Cost : ", WeightedTardinessCost);
+ writeln();
+ 
+ for(var d in demandAssignments) 
+ {
+     writeln(d.demandId, ": [",  d.startTime, ",", d.endTime, "] ");
+     writeln(" non-delivery cost: ", d.nonDeliveryCost,  ", tardiness cost: " , d.tardinessCost);
+ }
+ writeln();
+ for(var sa in stepAssignments) {
+     writeln(sa.stepId, " of ", sa.demandId,": [", sa.startTime, ",", sa.endTime, "] ","on ", sa.resourceId);
+     write(" processing cost: ", sa.procCost);
+     if (sa.setupCost > 0)
+         write(", setup cost: ", sa.setupCost);
+     writeln();
+     if (sa.startTimeSetup < sa.endTimeSetup)
+         writeln(" setup step: [",sa.startTimeSetup, ",", sa.endTimeSetup, "] ","on ", sa.setupResourceId);
+ }
+ writeln();
+ for(var sta in storageAssignments) {
+     if (sta.startTime < sta.endTime) {
+         writeln(sta.prodStepId, " of ", sta.demandId," produces quantity ", sta.quantity," in storage tank ", sta.storageTankId," at time ", sta.startTime," which is consumed at time ", sta.endTime);
+     }
+ }
 }
