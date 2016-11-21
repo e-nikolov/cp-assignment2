@@ -548,8 +548,8 @@ execute {
  writeln("Weighted Setup Cost : ", WeightedSetupCost);
  writeln("Weighted Tardiness Cost : ", WeightedTardinessCost);
  writeln();
-// writeln("Total Weighted Cost :", TotalCost);
-// writeln(); // ? shown in example output, absent from example code
+ writeln("Total Weighted Cost :", TotalCost);
+ writeln(); // ? shown in example output, absent from example code
  
  for(var d in demandAssignments) 
  {
@@ -572,4 +572,5 @@ execute {
          writeln(sta.prodStepId, " of ", sta.demandId," produces quantity ", sta.quantity," in storage tank ", sta.storageTankId," at time ", sta.startTime," which is consumed at time ", sta.endTime);
      }
  }
+ writeln();
 }
