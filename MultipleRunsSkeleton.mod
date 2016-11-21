@@ -3,11 +3,11 @@
     
    var models = new Array(
 		"foodPrecedence1"
-    	,"instance0"
+//    	,"instance0"
     	,"instance1"
-    	,"instance2"
-    	,"instance3"
-    	,"instance4"
+//    	,"instance2"
+//    	,"instance3"
+//    	,"instance4"
    );
    
    var solutions = new Array( models.length );

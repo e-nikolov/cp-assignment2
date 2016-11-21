@@ -310,20 +310,19 @@ execute {
 //    cp.param.DefaultInferenceLevel = "Low";
     cp.param.DefaultInferenceLevel = "Medium";
     
-    cp.param.restartfaillimit = 100;
+    cp.param.restartfaillimit = 200;
     
     var f = cp.factory;
 //  cp.setSearchPhases(f.searchPhase(resources));
 //  cp.setSearchPhases(f.searchPhase(prodSteps));
 //	cp.setSearchPhases(f.searchPhase(demand));
 //	cp.setSearchPhases(f.searchPhase(setupResources));
-	cp.setSearchPhases(f.searchPhase(demandStepAlternative));
+//	cp.setSearchPhases(f.searchPhase(demandStepAlternative));
+//  cp.setSearchPhases(f.searchPhase(resources), f.searchPhase(prodSteps), f.searchPhase(demand));
     
     cp.param.TimeLimit = Opl.card(Demands);
 //    cp.param.TimeLimit = 10*Opl.card(Demands);
 }
-
-//todo add some min total cost or smth.
 
 minimize 
   TotalCost;
@@ -549,8 +548,8 @@ execute {
  writeln("Weighted Setup Cost : ", WeightedSetupCost);
  writeln("Weighted Tardiness Cost : ", WeightedTardinessCost);
  writeln();
- writeln("Total Weighted Cost :", TotalCost);
- writeln(); // ? shown in example output, absent from example code
+// writeln("Total Weighted Cost :", TotalCost);
+// writeln(); // ? shown in example output, absent from example code
  
  for(var d in demandAssignments) 
  {
