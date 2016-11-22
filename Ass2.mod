@@ -196,9 +196,9 @@ dvar int costSetupDemandeStepAlternative[<<dem,st>,alt> in DemandStepAlternative
 //                   Storage tanks
 
 // get the stepID's of steps that are last. The storage after these steps will be 0 0 0.
-{string} stepIDs = union(st in Steps) {st.stepId};
-{string} stepsWithPredecessorIDs = union(pr in Precedences) {pr.successorId};
-{string} stepsWithSuccessorIDs = union(pr in Precedences) {pr.predecessorId};
+{string} stepIDs = union(step in Steps) {step.stepId};
+{string} stepsWithPredecessorIDs = union(precedence in Precedences) {precedence.successorId};
+{string} stepsWithSuccessorIDs = union(precedence in Precedences) {precedence.predecessorId};
 {string} endingStepsIDs = stepIDs diff stepsWithSuccessorIDs;
 {string} startingStepsIDs = stepIDs diff stepsWithPredecessorIDs;
  
@@ -220,7 +220,7 @@ tuple minMaxStorageTimes {
 
 dvar interval storageAfterProdStep[<dem,st> in DemSteps]
     optional
-    in 0..dem.deliveryMax
+    //in 0..dem.deliveryMax
     size item(minMaxStepStorageTime[st.stepId], <st.stepId>).minTime 
          .. 
          minl(item(minMaxStepStorageTime[st.stepId], <st.stepId>).maxTime, maxDemandStoreTime[dem]);
@@ -235,7 +235,7 @@ tuple StorageAfterProdStepAlternatives {
      
 dvar interval storageAfterProdStepAlternatives[<<dem,st>,storProd> in StorageAfterProdStepAlternative]
     optional
-    in 0..dem.deliveryMax
+    //in 0..dem.deliveryMax
     size item(minMaxStepStorageTime[st.stepId], <st.stepId>).minTime 
          .. 
          minl(item(minMaxStepStorageTime[st.stepId], <st.stepId>).maxTime, maxDemandStoreTime[dem]);    
@@ -318,9 +318,10 @@ execute {
 //  cp.setSearchPhases(f.searchPhase(prodSteps));
 //	cp.setSearchPhases(f.searchPhase(demand));
 //	cp.setSearchPhases(f.searchPhase(setupResources));
-//	cp.setSearchPhases(f.searchPhase(demandStepAlternative));
-	if(Opl.card(Demands) < 33)
-    	cp.setSearchPhases(f.searchPhase(demandStepAlternative), f.searchPhase(prodSteps), f.searchPhase(resources), f.searchPhase(demand));
+    if (Opl.card(Demands) < 30) {
+	   cp.setSearchPhases(f.searchPhase(demandStepAlternative));
+    }
+//  cp.setSearchPhases(f.searchPhase(resources), f.searchPhase(prodSteps), f.searchPhase(demand));
     
     cp.param.TimeLimit = Opl.card(Demands);
 //    cp.param.TimeLimit = 10*Opl.card(Demands);
@@ -331,8 +332,10 @@ minimize
 subject to {
     
     //end of the last steps must be after the mindeliverytime.
-    forall(<dem,st> in DemSteps : st.stepId in endingStepsIDs)
+    forall(<dem,st> in DemSteps : st.stepId in endingStepsIDs) {
         endOf(prodSteps[<dem,st>], dem.deliveryMin) >= dem.deliveryMin;
+        endOf(prodSteps[<dem,st>], dem.deliveryMax) <= dem.deliveryMax;
+    }
     
     // this won't be needed in the new model
     forall(<dem,st> in DemSteps : st.stepId in endingStepsIDs) {
@@ -445,11 +448,12 @@ subject to {
             alwaysEqual(tankState[stT], storageAfterProdStepAlternatives[<<dem,st>,storProd>], dem.productId);
     }
 	//storages after the first steps should start after a certain setup time if such is needed.
+	// presenceof => is much better on all instances except 3.
 	forall(<dem,st> in DemSteps, storProd in StorageProductions, stT in StorageTanks
     	: st.stepId in startingStepsIDs && st.stepId == storProd.prodStepId 
           && stT.storageTankId == storProd.storageTankId) 
-            presenceOf(storageAfterProdStep[<dem,st>]) 
-          	  => startOf(storageAfterProdStep[<dem,st>]) 
+            presenceOf(storageAfterProdStep[<dem,st>]) => 
+          	  startOf(storageAfterProdStep[<dem,st>]) 
           		   >= tankSetupTime[stT][dem.productId][stT.initialProductId];
 	
     // tank should not overfill

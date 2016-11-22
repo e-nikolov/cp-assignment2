@@ -37,3 +37,61 @@ between 2 consecutive steps, there must be minDelay time
 cp.param.DefaultInferenceLevel = "Medium";				4187.5
 
 
+
+It appears that all the constraints directly on the intervals themselves are making performance worse.
+Big impact form 
+
+dvar interval storageAfterProdStep[<dem,st> in DemSteps]
+    optional
+    in 0..dem.deliveryMax
+    size item(minMaxStepStorageTime[st.stepId], <st.stepId>).minTime 
+         .. 
+         minl(item(minMaxStepStorageTime[st.stepId], <st.stepId>).maxTime, maxDemandStoreTime[dem]);
+ 
+Instance 1 drops to 3.3k if we remove 0..dem.deliveryMax
+
+Is this still correct?
+
+
+
+
+
+
+
+
+
+
+
+
+ Constraint variants
+
+
+    forall(<dem,st> in DemSteps : st.stepId in endingStepsIDs) {
+        endOf(prodSteps[<dem,st>], dem.deliveryMin) >= dem.deliveryMin;
+        endOf(prodSteps[<dem,st>], dem.deliveryMin) <= dem.deliveryMax;
+    }
+
+    Instance1 -  4 938.5
+    Instance2 - 11 078
+
+
+    forall(<dem,st> in DemSteps) {
+        endOf(prodSteps[<dem,st>], dem.deliveryMin) >= dem.deliveryMin;
+        endOf(prodSteps[<dem,st>], dem.deliveryMin) <= dem.deliveryMax;
+    }
+
+    Instance0 - 3 223.5
+    Instance1 - No solution
+
+
+
+
+
+
+Good results
+
+Instance0 1442.67
+Instance1 3686.50
+Instance2 12094
+Instance3 12033,50
+Instance4 21079

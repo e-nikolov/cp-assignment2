@@ -185,6 +185,13 @@ dvar int setupCostOfAlternativeResourceForProductionStep[<dem, st, alt> in Alter
 int maxDemandStoreTime[dem in Demands] = dem.deliveryMax;
       //- sum(st in Steps) min(alt in Alternatives) where st.productId == dem.productId && alt.stepId == st.stepId;
 
+// get the stepID's of steps that are last. The storage after these steps will be 0 0 0.
+{string} ProductionStepIDSet = union(step in Steps) {step.stepId};
+{string} StepWithPredecessorIDSet = union(precedence in Precedences) {precedence.successorId};
+{string} StepWithSuccessorIDSet = union(precedence in Precedences) {precedence.predecessorId};
+{string} EndingStepIDSet = ProductionStepIDSet diff StepWithSuccessorIDSet;
+{string} StartingStepIDSet = ProductionStepIDSet diff StepWithPredecessorIDSet;
+
     
 // TODO replace with storage for each precedence
 // A storage step happens between 2 consecutive production steps and is therefore
@@ -209,7 +216,7 @@ tuple StorageStepForDemand {
 
 dvar interval storageStepInterval[<demand, prevStep, nextStep, precedence> in StorageStepForDemandSet] // size is taken from alternatives.
     optional
-    in 0..demand.deliveryMax
+    //in 0..demand.deliveryMax
     size precedence.delayMin
          ..
          precedence.delayMax;
@@ -234,13 +241,18 @@ tuple AlternativeTankForStorageStep {
 
 dvar interval alternativeTankForStorageStepInterval[<demand, prevStep, nextStep, precedence, alternativeTank> in AlternativeTankForStorageStepSet]
     optional
-    in 0..demand.deliveryMax
+    //in 0..demand.deliveryMax
     size precedence.delayMin
          ..
          precedence.delayMax;
      
 {TransitionMatrixItem} tankSetupTimeTransitionMatrix[tank in StorageTanks] =
     {<p1, p2, time> | <tank.setupMatrixId, p1, p2, time, cost> in Setups};
+
+int tankSetupTime[t in StorageTanks][p1 in ProductIds union {-1}][p2 in ProductIds] =
+    sum(<t.setupMatrixId, p1, p2, time, cost> in Setups) time;
+
+
     
 stateFunction tankState[tank in StorageTanks] with tankSetupTimeTransitionMatrix[tank];
 
@@ -288,13 +300,30 @@ execute {
 //  cp.param.TimeLimit = Opl.card(Demands)*10;
     cp.param.TimeLimit = Opl.card(Demands);
     
+    cp.param.DefaultInferenceLevel = "Medium";
+    
+    cp.param.restartfaillimit = 100;
 
-  var f = cp.factory;
-  cp.setSearchPhases(f.searchPhase(resourceScheduleIntervalSequence));
+    if (Opl.card(Demands) < 30) {
+        var f = cp.factory;
+        cp.setSearchPhases(f.searchPhase(alternativeResourceForProductionStepInterval));
+    }
+
 }
 minimize 
   TotalCost;
 subject to {
+
+    //end of the last steps must be after the mindeliverytime.
+    forall(<demand, step> in ProductionStepForDemandSet : step.stepId in EndingStepIDSet) {
+        endOf(productionStepInterval[<demand,step>], demand.deliveryMin) >= demand.deliveryMin;
+        endOf(productionStepInterval[<demand,step>], demand.deliveryMax) <= demand.deliveryMax;
+    }
+
+    // All setup intervals are just before the interval they precede
+    forall(<demand, step> in ProductionStepForDemandSet)
+        endAtStart(productionStepSetupInterval[<demand, step>], productionStepInterval[<demand, step>]);
+
     // TODO Alternative resources for production steps
     forall(<demand, step> in ProductionStepForDemandSet)
         alternative(productionStepInterval[<demand, step>], 
@@ -331,12 +360,15 @@ subject to {
     // TODO endBeforeStart and startBeforeEnd for minimum and -maximum delay of storage.
     forall(<demand, prevStep, nextStep, precedence> in StorageStepForDemandSet)
     {
+        
         // Enforce precedences and min/max delay between them.
         endBeforeStart(productionStepInterval[<demand, prevStep>], productionStepInterval[<demand, nextStep>], precedence.delayMin);
         startBeforeEnd(productionStepInterval[<demand, nextStep>], productionStepInterval[<demand, prevStep>], -precedence.delayMax);
 
         // The intervals for all production steps for a demand must have the same presence value.
         presenceOf(productionStepInterval[<demand, prevStep>]) == presenceOf(productionStepInterval[<demand, nextStep>]);
+        presenceOf(storageStepInterval[<demand, prevStep, nextStep, precedence>]) == (lengthOf(storageStepInterval[<demand, prevStep, nextStep, precedence>]) > 0);  
+  
 
         // TODO add storages between each 2 successive production steps
         // TODO Each storage step needs to fit exactly between the two production steps around it.
@@ -373,9 +405,7 @@ subject to {
     }
 
     // ???? Should we have another constraint for all precedences of alternative resources?
-   
-
-    
+        
 
     // TODO Specify the size of the setup of each productionScheduleInterval.
 
@@ -397,7 +427,7 @@ subject to {
         (lengthOf(alternativeResourceForProductionStepInterval[arfps]) > 0);
         
         setupLenConstraint: 
-        lengthOf(productionStepSetupInterval[<arfps.demand, arfps.step>])// == 0;
+        lengthOf(productionStepSetupInterval[<arfps.demand, arfps.step>])
         ==
         resourceSetupTime[resource]
         [
@@ -409,6 +439,7 @@ subject to {
                 -1
             )
         ][arfps.demand.productId];
+
         setupCostConstraint:
         setupCostOfAlternativeResourceForProductionStep[arfps]//== 0;
         ==
@@ -427,6 +458,11 @@ subject to {
     // TODO the setup of each productionScheduleInterval needs to happen before it and also must happen after the previous interval that uses the same resource (found in the resource sequence)
 
     // TODO A demand should be delivered after its minimum delivery time.
+
+
+    forall(atfss in AlternativeTankForStorageStepSet, tank in StorageTanks
+    : atfss.prevStep.stepId in StartingStepIDSet && tank.storageTankId == atfss.alternativeTank.storageTankId) 
+          startOf(alternativeTankForStorageStepInterval[atfss]) >= tankSetupTime[tank][atfss.demand.productId][tank.initialProductId];
 
     // TODO Step and Cumul functions for each storage.
 
