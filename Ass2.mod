@@ -214,7 +214,7 @@ tuple minMaxStorageTimes {
 
 // The time bounds depend both on the previous and following step, but it seems like this is only calculating it based on the previous step??
 {minMaxStorageTimes} minMaxStepStorageTime[st in stepIDs]
-                        = {<st, pr.delayMin, pr.delayMax> | pr in Precedences : pr.predecessorId == st}
+                        = {<st, maxl(pr.delayMin, 0), maxl(pr.delayMax, 0)> | pr in Precedences : pr.predecessorId == st}
                           union 
                           {<st2, 0, 0> | st2 in endingStepsIDs : st2 == st};
 
