@@ -253,7 +253,6 @@ stateFunction tankStoredProductState[tank in StorageTanks] with tankSetupTimeTra
 cumulFunction tankStoredAmountOverTime[tank in StorageTanks] =
         sum(<demand, prevStep, nextStep, precedence, alternativeTank> in AlternativeTankForStorageStepSet :  // all storage tanks available for a storage step
                 alternativeTank.storageTankId == tank.storageTankId
-//           ) pulse(storageStepInterval[<demand, prevStep, nextStep, precedence>], demand.quantity);
            ) pulse(alternativeTankForStorageStepInterval[<demand, prevStep, nextStep, precedence, alternativeTank>], demand.quantity);
 
 //                       COSTS
@@ -287,35 +286,29 @@ dexpr float WeightedSetupCost =
 dexpr float TotalCost = WeightedTardinessCost + WeightedNonDeliveryCost + WeightedProcessingCost + WeightedSetupCost;
 
 dexpr int PreviousProductOnResource[arfps in AlternativeResourceForProductionStepSet] =
-	typeOfPrev
-	(
-		resourceScheduleIntervalSequence[item(Resources, <arfps.alternativeResource.resourceId>)],
-		alternativeResourceForProductionStepInterval[arfps],
-		item(Resources, <arfps.alternativeResource.resourceId>).initialProductId,
-		-1
-	);
+    typeOfPrev
+    (
+        resourceScheduleIntervalSequence[item(Resources, <arfps.alternativeResource.resourceId>)],
+        alternativeResourceForProductionStepInterval[arfps],
+        item(Resources, <arfps.alternativeResource.resourceId>).initialProductId,
+        -1
+    );
 
 execute {
     cp.param.Workers = 1;
-    
-//    cp.param.DefaultInferenceLevel = "Extended";
-//    cp.param.DefaultInferenceLevel = "Low";
+ 
     cp.param.DefaultInferenceLevel = "Medium";
     
     cp.param.restartfaillimit = 200;
     
     var f = cp.factory;
-//  cp.setSearchPhases(f.searchPhase(resources));
-//  cp.setSearchPhases(f.searchPhase(productionStepInterval));
-//  cp.setSearchPhases(f.searchPhase(demandInterval));
-//  cp.setSearchPhases(f.searchPhase(setupResources));
+ 
     if (Opl.card(Demands) < 33) {
        cp.setSearchPhases(f.searchPhase(alternativeResourceForProductionStepInterval));
     }
-//  cp.setSearchPhases(f.searchPhase(resources), f.searchPhase(productionStepInterval), f.searchPhase(demand));
     
+//    cp.param.TimeLimit = Opl.card(Demands) * 10;
     cp.param.TimeLimit = Opl.card(Demands);
-//    cp.param.TimeLimit = 10*Opl.card(Demands);
 }
 
 minimize 
@@ -451,22 +444,23 @@ subject to {
                >= tankSetupTime[tank][atfss.demand.productId][tank.initialProductId];
     }
     
-    forall
-    (
-    	demand1, demand2 in Demands :
-    		demand1.productId 					== demand2.productId &&
-    		demand1.deliveryMin 				== demand2.deliveryMin &&
-    		demand1.deliveryMax					== demand2.deliveryMax &&
-    		demand1.dueTime 					== demand2.dueTime &&
-    		demand1.nonDeliveryVariableCost 	== demand2.nonDeliveryVariableCost &&
-    		demand1.quantity					== demand2.quantity &&
-    		demand1.tardinessVariableCost		== demand2.tardinessVariableCost &&
-    		demand1.demandId					< demand2.demandId
-    		
-    ) {
-    	startOf(demandInterval[demand1]) < startOf(demandInterval[demand2]);         	 
-    }
-    
+    if(card(Demands) > 33) {
+        forall
+        (
+            demand1, demand2 in Demands :
+                demand1.productId                   == demand2.productId &&
+                demand1.deliveryMin                 == demand2.deliveryMin &&
+                demand1.deliveryMax                 == demand2.deliveryMax &&
+                demand1.dueTime                     == demand2.dueTime &&
+                demand1.nonDeliveryVariableCost     == demand2.nonDeliveryVariableCost &&
+                demand1.quantity                    == demand2.quantity &&
+                demand1.tardinessVariableCost       == demand2.tardinessVariableCost &&
+                demand1.demandId                    < demand2.demandId
+                
+        ) {
+            startOf(demandInterval[demand1]) < startOf(demandInterval[demand2]);             
+        }
+    }    
 };     
  
 
@@ -549,39 +543,39 @@ tuple StorageAssignment {
 };
 
 execute {
- writeln("Total Non-Delivery Cost : ", TotalNonDeliveryCost);
- writeln("Total Processing Cost : ", TotalProcessingCost);
- writeln("Total Setup Cost : ", TotalSetupCost);
- writeln("Total Tardiness Cost : ", TotalTardinessCost);
- writeln();
- writeln("Weighted Non-Delivery Cost : ",WeightedNonDeliveryCost);
- writeln("Weighted Processing Cost : ", WeightedProcessingCost);
- writeln("Weighted Setup Cost : ", WeightedSetupCost);
- writeln("Weighted Tardiness Cost : ", WeightedTardinessCost);
- writeln();
+// writeln("Total Non-Delivery Cost : ", TotalNonDeliveryCost);
+// writeln("Total Processing Cost : ", TotalProcessingCost);
+// writeln("Total Setup Cost : ", TotalSetupCost);
+// writeln("Total Tardiness Cost : ", TotalTardinessCost);
+// writeln();
+// writeln("Weighted Non-Delivery Cost : ",WeightedNonDeliveryCost);
+// writeln("Weighted Processing Cost : ", WeightedProcessingCost);
+// writeln("Weighted Setup Cost : ", WeightedSetupCost);
+// writeln("Weighted Tardiness Cost : ", WeightedTardinessCost);
+// writeln();
  writeln("Total Weighted Cost :", TotalCost);
  writeln(); // ? shown in example output, absent from example code
  
- for(var d in demandAssignments) 
- {
-     writeln(d.demandId, ": [",  d.startTime, ",", d.endTime, "] ");
-     writeln(" non-delivery cost: ", d.nonDeliveryCost,  ", tardiness cost: " , d.tardinessCost);
- }
- writeln();
- for(var sa in stepAssignments) {
-     writeln(sa.stepId, " of ", sa.demandId,": [", sa.startTime, ",", sa.endTime, "] ","on ", sa.resourceId);
-     write(" processing cost: ", sa.procCost);
-     if (sa.setupCost > 0)
-         write(", setup cost: ", sa.setupCost);
-     writeln();
-     if (sa.startTimeSetup < sa.endTimeSetup)
-         writeln(" setup step: [",sa.startTimeSetup, ",", sa.endTimeSetup, "] ","on ", sa.setupResourceId);
- }
- writeln();
- for(var sta in storageAssignments) {
-     if (sta.startTime < sta.endTime) {
-         writeln(sta.prevStepId, " of ", sta.demandId," produces quantity ", sta.quantity," in storage tank ", sta.storageTankId," at time ", sta.startTime," which is consumed at time ", sta.endTime);
-     }
- }
- writeln();
+// for(var d in demandAssignments) 
+// {
+//     writeln(d.demandId, ": [",  d.startTime, ",", d.endTime, "] ");
+//     writeln(" non-delivery cost: ", d.nonDeliveryCost,  ", tardiness cost: " , d.tardinessCost);
+// }
+// writeln();
+// for(var sa in stepAssignments) {
+//     writeln(sa.stepId, " of ", sa.demandId,": [", sa.startTime, ",", sa.endTime, "] ","on ", sa.resourceId);
+//     write(" processing cost: ", sa.procCost);
+//     if (sa.setupCost > 0)
+//         write(", setup cost: ", sa.setupCost);
+//     writeln();
+//     if (sa.startTimeSetup < sa.endTimeSetup)
+//         writeln(" setup step: [",sa.startTimeSetup, ",", sa.endTimeSetup, "] ","on ", sa.setupResourceId);
+// }
+// writeln();
+// for(var sta in storageAssignments) {
+//     if (sta.startTime < sta.endTime) {
+//         writeln(sta.prevStepId, " of ", sta.demandId," produces quantity ", sta.quantity," in storage tank ", sta.storageTankId," at time ", sta.startTime," which is consumed at time ", sta.endTime);
+//     }
+// }
+// writeln();
 }
