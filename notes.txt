@@ -95,3 +95,20 @@ Instance1 3686.50
 Instance2 12094
 Instance3 12033,50
 Instance4 21079
+
+
+
+
+
+Symmetry breaking:
+If there are 2 demands which are exactly the same, process the one with smaller id first.
+
+If there are 2 alternative resources for a step on a demand, use the one with the smaller id first as long as doing so:
+	would cost the same on either
+	would take the same time on either
+	would have the same setup cost
+	would have the same setup time
+
+
+Dominance rules:
+If there are several available resources, first try the cheapest one for the current demand.

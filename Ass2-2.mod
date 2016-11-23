@@ -17,7 +17,7 @@ tuple Product {
 
 tuple Demand {
     key string demandId;
-    int productId   ;
+    int productId;
     int quantity;
     int deliveryMin;
     int deliveryMax;
@@ -286,6 +286,15 @@ dexpr float WeightedSetupCost =
 
 dexpr float TotalCost = WeightedTardinessCost + WeightedNonDeliveryCost + WeightedProcessingCost + WeightedSetupCost;
 
+dexpr int PreviousProductOnResource[arfps in AlternativeResourceForProductionStepSet] =
+	typeOfPrev
+	(
+		resourceScheduleIntervalSequence[item(Resources, <arfps.alternativeResource.resourceId>)],
+		alternativeResourceForProductionStepInterval[arfps],
+		item(Resources, <arfps.alternativeResource.resourceId>).initialProductId,
+		-1
+	);
+
 execute {
     cp.param.Workers = 1;
     
@@ -314,11 +323,12 @@ minimize
 subject to {
     
     //end of the last steps must be after the mindeliverytime.
-    forall(<demand,step> in ProductionStepForDemandSet : step.stepId in EndingStepIDSet) {
+    forall(<demand, step> in ProductionStepForDemandSet : step.stepId in EndingStepIDSet) {
         endOf(productionStepInterval[<demand,step>], demand.deliveryMin) >= demand.deliveryMin;
         endOf(productionStepInterval[<demand,step>], demand.deliveryMax) <= demand.deliveryMax;
     }
     
+//    
     
     // All resource setup intervals are just before the interval they precede
     forall(<demand, step, alternativeResource> in AlternativeResourceForProductionStepSet)
@@ -347,40 +357,27 @@ subject to {
     
         
     // setting the setup time and cost of setups before each step. 
-    forall(<demand, step, alternativeResource> in AlternativeResourceForProductionStepSet, resource in Resources 
-                    : resource.resourceId == alternativeResource.resourceId) {
-        presenceOf(alternativeResourceForProductionStepSetupInterval[<demand, step, alternativeResource>])
+    forall(arfps in AlternativeResourceForProductionStepSet, resource in Resources 
+                    : resource.resourceId == arfps.alternativeResource.resourceId) {
+        presenceOf(alternativeResourceForProductionStepSetupInterval[arfps])
         ==
-        presenceOf(alternativeResourceForProductionStepInterval[<demand, step, alternativeResource>]);
+        presenceOf(alternativeResourceForProductionStepInterval[arfps]);
         
         setupLenConstraint: 
-        lengthOf(alternativeResourceForProductionStepSetupInterval[<demand, step, alternativeResource>])// == 0;
+        lengthOf(alternativeResourceForProductionStepSetupInterval[arfps])
         ==
-        resourceSetupTime[resource]
-        [
-            typeOfPrev
-            (
-                resourceScheduleIntervalSequence[resource], 
-                alternativeResourceForProductionStepInterval[<demand, step, alternativeResource>], 
-                resource.initialProductId, 
-                -1
-            )
-        ][demand.productId];
-//          == stpTimes[ord(Resources, resource)][typeOfPrev(resourceScheduleIntervalSequence[resource], alternativeResourceForProductionStepInterval[<demand, step, alternativeResource>], resource.initialProductId)][demand.productId];
+        resourceSetupTime
+        [resource]
+        [PreviousProductOnResource[arfps]]
+        [arfps.demand.productId];
             
         setupCostConstraint:
-        setupCostOfAlternativeResourceForProductionStep[<demand, step, alternativeResource>]//== 0;
+        setupCostOfAlternativeResourceForProductionStep[arfps]
         == 
-        resourceSetupCost[resource]
-        [
-            typeOfPrev
-            (
-                resourceScheduleIntervalSequence[resource],
-                alternativeResourceForProductionStepInterval[<demand, step, alternativeResource>], 
-                resource.initialProductId,
-                -1
-            )
-        ][demand.productId];
+        resourceSetupCost
+        [resource]
+        [PreviousProductOnResource[arfps]]
+        [arfps.demand.productId];
     }
         
     // setups using the same setup resource must not overlap
@@ -453,6 +450,23 @@ subject to {
             startOf(storageStepInterval[<atfss.demand, atfss.prevStep, atfss.nextStep, atfss.precedence>]) 
                >= tankSetupTime[tank][atfss.demand.productId][tank.initialProductId];
     }
+    
+    forall
+    (
+    	demand1, demand2 in Demands :
+    		demand1.productId 					== demand2.productId &&
+    		demand1.deliveryMin 				== demand2.deliveryMin &&
+    		demand1.deliveryMax					== demand2.deliveryMax &&
+    		demand1.dueTime 					== demand2.dueTime &&
+    		demand1.nonDeliveryVariableCost 	== demand2.nonDeliveryVariableCost &&
+    		demand1.quantity					== demand2.quantity &&
+    		demand1.tardinessVariableCost		== demand2.tardinessVariableCost &&
+    		demand1.demandId					< demand2.demandId
+    		
+    ) {
+    	startOf(demandInterval[demand1]) < startOf(demandInterval[demand2]);         	 
+    }
+    
 };     
  
 
