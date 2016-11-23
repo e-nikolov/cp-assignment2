@@ -209,10 +209,10 @@ tuple StorageStepForDemand {
 
 dvar interval storageStepInterval[<demand, prevStep, nextStep, precedence> in StorageStepForDemandSet] // size is taken from alternatives.
     optional
-    in 0..demand.deliveryMax
-    size precedence.delayMin
-         ..
-         precedence.delayMax
+//    in 0..demand.deliveryMax
+//    size precedence.delayMin
+//         ..
+//         precedence.delayMax
     ;
 
 tuple AlternativeTankForStorageStep {
@@ -408,8 +408,8 @@ subject to {
     forall(<demand, prevStep, nextStep, precedence> in StorageStepForDemandSet)
     {      
         // Enforce precedences and min/max delay between them.
-        endBeforeStart(productionStepInterval[<demand, prevStep>], productionStepInterval[<demand, nextStep>], precedence.delayMin);
-        startBeforeEnd(productionStepInterval[<demand, nextStep>], productionStepInterval[<demand, prevStep>], -precedence.delayMax);
+        endBeforeStart(productionStepInterval[<demand, prevStep>], productionStepInterval[<demand, nextStep>], maxl(precedence.delayMin, 0));
+        startBeforeEnd(productionStepInterval[<demand, nextStep>], productionStepInterval[<demand, prevStep>], minl(-precedence.delayMax, 0));
 
         // TODO add storages between each 2 successive production steps
         // TODO Each storage step needs to fit exactly between the two production steps around it.
