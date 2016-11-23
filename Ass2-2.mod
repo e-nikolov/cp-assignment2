@@ -171,7 +171,7 @@ tuple TransitionMatrixItem {
     int value;
 }; 
 
-{TransitionMatrixItem} setupTimesResourceScheduleIntervalSequence[resource in Resources] =
+{TransitionMatrixItem} resourceSetupTimeTransitionMatrix[resource in Resources] =
     {<prevProductId, nextProductId, time> | <resource.setupMatrixId, prevProductId, nextProductId, time, cost> in Setups};
 
 
@@ -194,7 +194,6 @@ dvar int setupCostOfAlternativeResourceForProductionStep[<demand, step, alternat
 
 //                   Storage tanks
 
-// get the stepID's of steps that are last. The storage after these steps will be 0 0 0.
 {string} ProductionStepIDSet = union(step in Steps) {step.stepId};
 {string} StepWithPredecessorIDSet = union(precedence in Precedences) {precedence.successorId};
 {string} StepWithSuccessorIDSet = union(precedence in Precedences) {precedence.predecessorId};
@@ -252,10 +251,8 @@ dvar interval alternativeTankForStorageStepInterval[<demand, prevStep, nextStep,
     in 0..demand.deliveryMax
     size precedence.delayMin
          ..
-         precedence.delayMax
-    ;
+         precedence.delayMax;
 
-// The time bounds depend both on the previous and following step, but it seems like this is only calculating it based on the previous step??
 {TransitionMatrixItem} tankSetupTimeTransitionMatrix[t in StorageTanks] =
     {<p1, p2, time> | <t.setupMatrixId, p1, p2, time, cost> in Setups};
 
@@ -265,9 +262,9 @@ int tankSetupTime[t in StorageTanks][p1 in ProductIDSet union {-1}][p2 in Produc
 stateFunction tankStoredProductState[tank in StorageTanks] with tankSetupTimeTransitionMatrix[tank];
 
 cumulFunction tankStoredAmountOverTime[tank in StorageTanks] =
-        sum(<demand, prevStep, nextStep, precedence, alternativeTank> in AlternativeTankForStorageStepSet :  // all storage tanks available for a storage step
-                alternativeTank.storageTankId == tank.storageTankId
-           ) pulse(alternativeTankForStorageStepInterval[<demand, prevStep, nextStep, precedence, alternativeTank>], demand.quantity);
+        sum(atfss in AlternativeTankForStorageStepSet :
+                atfss.alternativeTank.storageTankId == tank.storageTankId
+           ) pulse(alternativeTankForStorageStepInterval[atfss], atfss.demand.quantity);
 
 //                       COSTS
 
@@ -282,11 +279,8 @@ dexpr float TotalProcessingCost = sum(<demand, step, alternativeResource> in Alt
                 presenceOf(alternativeResourceForProductionStepInterval[<demand, step, alternativeResource>])
                 *(alternativeResource.fixedProcessingCost + demand.quantity * alternativeResource.variableProcessingCost);
 
-//dexpr float SetupCost = 0; 
 dexpr float TotalSetupCost = sum(<demand, step, alternativeResource> in AlternativeResourceForProductionStepSet)
                             setupCostOfAlternativeResourceForProductionStep[<demand, step, alternativeResource>];
-//                      + sum(<<demand,step>,storProd> in StorageAfterProdStepAlternative)
-//                          costStorageAfterProdStepAlternatives[<<demand,step>,storProd>]; 
 
 dexpr float WeightedTardinessCost = 
         TotalTardinessCost * item(CriterionWeights, <"TardinessCost">).weight;
@@ -322,7 +316,7 @@ execute {
        cp.setSearchPhases(f.searchPhase(alternativeResourceForProductionStepInterval));
     }
     
-//    cp.param.TimeLimit = Opl.card(Demands) * 10;
+    //cp.param.TimeLimit = Opl.card(Demands) * 10;
     cp.param.TimeLimit = Opl.card(Demands);
 }
 
@@ -339,8 +333,8 @@ subject to {
 //    
     
     // All resource setup intervals are just before the interval they precede
-    forall(<demand, step, alternativeResource> in AlternativeResourceForProductionStepSet)
-        endAtStart(alternativeResourceForProductionStepSetupInterval[<demand, step, alternativeResource>], alternativeResourceForProductionStepInterval[<demand, step, alternativeResource>]);
+    forall(arfps in AlternativeResourceForProductionStepSet)
+        endAtStart(alternativeResourceForProductionStepSetupInterval[arfps], alternativeResourceForProductionStepInterval[arfps]);
     
     // storages need to chose which tank to use. chose just one alternative each
     forall(<demand, prevStep, nextStep, precedence> in StorageStepForDemandSet)
@@ -351,17 +345,17 @@ subject to {
                ) alternativeTankForStorageStepInterval[<demand, prevStep, nextStep, precedence, alternativeTank>]);
     
     // If a demand is present, all the steps it requires must be present too (and vice versa)
-    forall(<demand,step> in ProductionStepForDemandSet)
-        presenceOf(demandInterval[demand]) == presenceOf(productionStepInterval[<demand,step>]);
+    forall(<demand, step> in ProductionStepForDemandSet)
+        presenceOf(demandInterval[demand]) == presenceOf(productionStepInterval[<demand, step>]);
     
     // Every step must be one and only one of it's alternatives 
-    forall(<demand,step> in ProductionStepForDemandSet)
-        alternative(productionStepInterval[<demand,step>], 
+    forall(<demand, step> in ProductionStepForDemandSet)
+        alternative(productionStepInterval[<demand, step>], 
             all(alternativeResource in Alternatives: alternativeResource.stepId == step.stepId) alternativeResourceForProductionStepInterval[<demand, step, alternativeResource>]);
     
     // steps using the same resource must not overlap
     forall(resource in Resources)
-        noOverlap(resourceScheduleIntervalSequence[resource], setupTimesResourceScheduleIntervalSequence[resource], 1);
+        noOverlap(resourceScheduleIntervalSequence[resource], resourceSetupTimeTransitionMatrix[resource], 1);
     
         
     // setting the setup time and cost of setups before each step. 
@@ -487,16 +481,16 @@ tuple DemandAssignment {
     float tardinessCost;
 };
 
-{DemandAssignment} demandAssignments = //{};
-{
-    <
-        demand.demandId,
-        startOf(demandInterval[demand]),
-        endOf(demandInterval[demand]),
-        (1 - presenceOf(demandInterval[demand])) * (demand.quantity * demand.nonDeliveryVariableCost),
-        endEval(demandInterval[demand], tardinessFees[demand])
-    > | demand in Demands
-};
+{DemandAssignment} demandAssignments =
+    {
+        <
+            demand.demandId,
+            startOf(demandInterval[demand]),
+            endOf(demandInterval[demand]),
+            (1 - presenceOf(demandInterval[demand])) * (demand.quantity * demand.nonDeliveryVariableCost),
+            endEval(demandInterval[demand], tardinessFees[demand])
+        > | demand in Demands
+    };
 
 tuple StepAssignment {
    key string demandId;
@@ -511,29 +505,29 @@ tuple StepAssignment {
    string setupResourceId;
 };
 {StepAssignment} stepAssignments =
-{
-    <
-        demand.demandId, 
-        step.stepId, 
-        startOf(productionStepInterval[<demand, step>]), 
-        endOf(productionStepInterval[<demand, step>]), 
-        alternativeResource.resourceId,
+    {
+        <
+            demand.demandId, 
+            step.stepId, 
+            startOf(productionStepInterval[<demand, step>]), 
+            endOf(productionStepInterval[<demand, step>]), 
+            alternativeResource.resourceId,
 
-        presenceOf(alternativeResourceForProductionStepInterval[<demand, step, alternativeResource>]) * 
-            (alternativeResource.fixedProcessingCost + (alternativeResource.variableProcessingCost * demand.quantity)),
+            presenceOf(alternativeResourceForProductionStepInterval[<demand, step, alternativeResource>]) * 
+                (alternativeResource.fixedProcessingCost + (alternativeResource.variableProcessingCost * demand.quantity)),
 
-        setupCostOfAlternativeResourceForProductionStep[<demand, step, alternativeResource>],
+            setupCostOfAlternativeResourceForProductionStep[<demand, step, alternativeResource>],
 
-        startOf(alternativeResourceForProductionStepSetupInterval[<demand, step, alternativeResource>]), 
-        endOf(alternativeResourceForProductionStepSetupInterval[<demand, step, alternativeResource>]),
-        step.setupResourceId
-    > | <demand, step> in ProductionStepForDemandSet,
-        <demand, step, alternativeResource> in AlternativeResourceForProductionStepSet,
-        resource in Resources :
-            presenceOf(alternativeResourceForProductionStepInterval[<demand, step, alternativeResource>]) && 
-            step.stepId == alternativeResource.stepId &&
-            alternativeResource.resourceId == resource.resourceId
-};
+            startOf(alternativeResourceForProductionStepSetupInterval[<demand, step, alternativeResource>]), 
+            endOf(alternativeResourceForProductionStepSetupInterval[<demand, step, alternativeResource>]),
+            step.setupResourceId
+        > | <demand, step> in ProductionStepForDemandSet,
+            <demand, step, alternativeResource> in AlternativeResourceForProductionStepSet,
+            resource in Resources :
+                presenceOf(alternativeResourceForProductionStepInterval[<demand, step, alternativeResource>]) && 
+                step.stepId == alternativeResource.stepId &&
+                alternativeResource.resourceId == resource.resourceId
+    };
 
 tuple StorageAssignment {
    key string demandId;
@@ -544,53 +538,53 @@ tuple StorageAssignment {
    string storageTankId;
 };
 {StorageAssignment} storageAssignments = 
-{
-    <
-        atfss.demand.demandId,
-        atfss.prevStep.stepId,
-        startOf(alternativeTankForStorageStepInterval[atfss]),
-        endOf(alternativeTankForStorageStepInterval[atfss]),
-        atfss.demand.quantity,
-        atfss.alternativeTank.storageTankId
-    > | atfss in AlternativeTankForStorageStepSet :
-          presenceOf(alternativeTankForStorageStepInterval[atfss])
-          && presenceOf(demandInterval[atfss.demand])
-};
+    {
+        <
+            atfss.demand.demandId,
+            atfss.prevStep.stepId,
+            startOf(alternativeTankForStorageStepInterval[atfss]),
+            endOf(alternativeTankForStorageStepInterval[atfss]),
+            atfss.demand.quantity,
+            atfss.alternativeTank.storageTankId
+        > | atfss in AlternativeTankForStorageStepSet :
+              presenceOf(alternativeTankForStorageStepInterval[atfss])
+              && presenceOf(demandInterval[atfss.demand])
+    };
 
 execute {
-// writeln("Total Non-Delivery Cost : ", TotalNonDeliveryCost);
-// writeln("Total Processing Cost : ", TotalProcessingCost);
-// writeln("Total Setup Cost : ", TotalSetupCost);
-// writeln("Total Tardiness Cost : ", TotalTardinessCost);
-// writeln();
-// writeln("Weighted Non-Delivery Cost : ",WeightedNonDeliveryCost);
-// writeln("Weighted Processing Cost : ", WeightedProcessingCost);
-// writeln("Weighted Setup Cost : ", WeightedSetupCost);
-// writeln("Weighted Tardiness Cost : ", WeightedTardinessCost);
-// writeln();
+ writeln("Total Non-Delivery Cost : ", TotalNonDeliveryCost);
+ writeln("Total Processing Cost : ", TotalProcessingCost);
+ writeln("Total Setup Cost : ", TotalSetupCost);
+ writeln("Total Tardiness Cost : ", TotalTardinessCost);
+ writeln();
+ writeln("Weighted Non-Delivery Cost : ",WeightedNonDeliveryCost);
+ writeln("Weighted Processing Cost : ", WeightedProcessingCost);
+ writeln("Weighted Setup Cost : ", WeightedSetupCost);
+ writeln("Weighted Tardiness Cost : ", WeightedTardinessCost);
+ writeln();
  writeln("Total Weighted Cost :", TotalCost);
  writeln(); // ? shown in example output, absent from example code
  
-// for(var d in demandAssignments) 
-// {
-//     writeln(d.demandId, ": [",  d.startTime, ",", d.endTime, "] ");
-//     writeln(" non-delivery cost: ", d.nonDeliveryCost,  ", tardiness cost: " , d.tardinessCost);
-// }
-// writeln();
-// for(var sa in stepAssignments) {
-//     writeln(sa.stepId, " of ", sa.demandId,": [", sa.startTime, ",", sa.endTime, "] ","on ", sa.resourceId);
-//     write(" processing cost: ", sa.procCost);
-//     if (sa.setupCost > 0)
-//         write(", setup cost: ", sa.setupCost);
-//     writeln();
-//     if (sa.startTimeSetup < sa.endTimeSetup)
-//         writeln(" setup step: [",sa.startTimeSetup, ",", sa.endTimeSetup, "] ","on ", sa.setupResourceId);
-// }
-// writeln();
-// for(var sta in storageAssignments) {
-//     if (sta.startTime < sta.endTime) {
-//         writeln(sta.prevStepId, " of ", sta.demandId," produces quantity ", sta.quantity," in storage tank ", sta.storageTankId," at time ", sta.startTime," which is consumed at time ", sta.endTime);
-//     }
-// }
-// writeln();
+ for(var d in demandAssignments) 
+ {
+     writeln(d.demandId, ": [",  d.startTime, ",", d.endTime, "] ");
+     writeln(" non-delivery cost: ", d.nonDeliveryCost,  ", tardiness cost: " , d.tardinessCost);
+ }
+ writeln();
+ for(var sa in stepAssignments) {
+     writeln(sa.stepId, " of ", sa.demandId,": [", sa.startTime, ",", sa.endTime, "] ","on ", sa.resourceId);
+     write(" processing cost: ", sa.procCost);
+     if (sa.setupCost > 0)
+         write(", setup cost: ", sa.setupCost);
+     writeln();
+     if (sa.startTimeSetup < sa.endTimeSetup)
+         writeln(" setup step: [",sa.startTimeSetup, ",", sa.endTimeSetup, "] ","on ", sa.setupResourceId);
+ }
+ writeln();
+ for(var sta in storageAssignments) {
+     if (sta.startTime < sta.endTime) {
+         writeln(sta.prevStepId, " of ", sta.demandId," produces quantity ", sta.quantity," in storage tank ", sta.storageTankId," at time ", sta.startTime," which is consumed at time ", sta.endTime);
+     }
+ }
+ writeln();
 }
