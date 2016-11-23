@@ -101,6 +101,20 @@ tuple CriterionWeight {
 //                              End of input data
 
 
+int NumberOfEquivalentDemands =
+        sum
+        (
+            demand1, demand2 in Demands :
+                demand1.productId                   == demand2.productId &&
+                demand1.deliveryMin                 == demand2.deliveryMin &&
+                demand1.deliveryMax                 == demand2.deliveryMax &&
+                demand1.dueTime                     == demand2.dueTime &&
+                demand1.nonDeliveryVariableCost     == demand2.nonDeliveryVariableCost &&
+                demand1.quantity                    == demand2.quantity &&
+                demand1.tardinessVariableCost       == demand2.tardinessVariableCost                
+        ) (demand1.demandId < demand2.demandId);
+
+
 dvar interval demandInterval[demand in Demands]
     optional
 //    in 0..demand.deliveryMax
@@ -302,6 +316,7 @@ execute {
     cp.param.restartfaillimit = 200;
     
     var f = cp.factory;
+    
  
     if (Opl.card(Demands) < 33) {
        cp.setSearchPhases(f.searchPhase(alternativeResourceForProductionStepInterval));
@@ -444,7 +459,7 @@ subject to {
                >= tankSetupTime[tank][atfss.demand.productId][tank.initialProductId];
     }
     
-    if(card(Demands) > 33) {
+    if(NumberOfEquivalentDemands > 7) {
         forall
         (
             demand1, demand2 in Demands :
