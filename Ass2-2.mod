@@ -311,7 +311,9 @@ execute {
     
     var f = cp.factory;
     
- 
+    // It appears that for larger instances, setting the search phase to first decide on the 
+    // alternativeResourceForProductionStepIntervals results in no solutions being found, but without it,
+    // it works fine on larger instances.
     if (Opl.card(Demands) < 33) {
        cp.setSearchPhases(f.searchPhase(alternativeResourceForProductionStepInterval));
     }
@@ -324,19 +326,17 @@ minimize
   TotalCost;
 subject to {
     
-    //end of the last steps must be after the mindeliverytime.
+    // End of the last steps must be before/after the demand's minimum/maximum delivery time.
     forall(<demand, step> in ProductionStepForDemandSet : step.stepId in EndingStepIDSet) {
         endOf(productionStepInterval[<demand,step>], demand.deliveryMin) >= demand.deliveryMin;
         endOf(productionStepInterval[<demand,step>], demand.deliveryMax) <= demand.deliveryMax;
     }
     
-//    
-    
-    // All resource setup intervals are just before the interval they precede
+    // All resource setup intervals are just before the interval they are setting up.
     forall(arfps in AlternativeResourceForProductionStepSet)
         endAtStart(alternativeResourceForProductionStepSetupInterval[arfps], alternativeResourceForProductionStepInterval[arfps]);
     
-    // storages need to chose which tank to use. chose just one alternative each
+    // Storage steps need to choose one of the available alternative tanks.
     forall(<demand, prevStep, nextStep, precedence> in StorageStepForDemandSet)
         alternative(storageStepInterval[<demand, prevStep, nextStep, precedence>], 
             all(alternativeTank in StorageProductions :
@@ -344,49 +344,51 @@ subject to {
                     alternativeTank.nextStepId == nextStep.stepId
                ) alternativeTankForStorageStepInterval[<demand, prevStep, nextStep, precedence, alternativeTank>]);
     
-    // If a demand is present, all the steps it requires must be present too (and vice versa)
+    // If a demand is chosen to be delivered, all the production steps it requires must be performed as well (and vice versa)
     forall(<demand, step> in ProductionStepForDemandSet)
         presenceOf(demandInterval[demand]) == presenceOf(productionStepInterval[<demand, step>]);
     
-    // Every step must be one and only one of it's alternatives 
+    // Each production step must use exactly one of the available alternative resources.
     forall(<demand, step> in ProductionStepForDemandSet)
         alternative(productionStepInterval[<demand, step>], 
             all(alternativeResource in Alternatives: alternativeResource.stepId == step.stepId) alternativeResourceForProductionStepInterval[<demand, step, alternativeResource>]);
     
-    // steps using the same resource must not overlap
+    // Production steps using the same resource must not overlap.
     forall(resource in Resources)
         noOverlap(resourceScheduleIntervalSequence[resource], resourceSetupTimeTransitionMatrix[resource], 1);
     
         
-    // setting the setup time and cost of setups before each step. 
-    forall(arfps in AlternativeResourceForProductionStepSet, resource in Resources 
-                    : resource.resourceId == arfps.alternativeResource.resourceId) {
+    // Setting the setup time and cost of setups before each step. 
+    forall(arfps in AlternativeResourceForProductionStepSet, resource in Resources :
+            resource.resourceId == arfps.alternativeResource.resourceId) {
+
         presenceOf(alternativeResourceForProductionStepSetupInterval[arfps])
         ==
         presenceOf(alternativeResourceForProductionStepInterval[arfps]);
         
-        setupLenConstraint: 
+        // Constrain the length of setup intervals.
         lengthOf(alternativeResourceForProductionStepSetupInterval[arfps])
         ==
         resourceSetupTime
-        [resource]
-        [PreviousProductOnResource[arfps]]
-        [arfps.demand.productId];
+            [resource]
+            [PreviousProductOnResource[arfps]]
+            [arfps.demand.productId];
             
-        setupCostConstraint:
+        // Constrain the cost of setup intervals.
         setupCostOfAlternativeResourceForProductionStep[arfps]
         == 
         resourceSetupCost
-        [resource]
-        [PreviousProductOnResource[arfps]]
-        [arfps.demand.productId];
+            [resource]
+            [PreviousProductOnResource[arfps]]
+            [arfps.demand.productId];
     }
         
-    // setups using the same setup resource must not overlap
-    forall(stpRes in SetupResources)
-        noOverlap(setupResourceScheduleIntervalSequence[stpRes]);
+    // Setup steps using the same setup resource must not overlap.
+    forall(setupResource in SetupResources)
+        noOverlap(setupResourceScheduleIntervalSequence[setupResource]);
 
 
+    // Storage steps fit exactly between two consecutive production steps.
     forall(<demand, prevStep, nextStep, precedence> in StorageStepForDemandSet)
     {
   
@@ -406,12 +408,25 @@ subject to {
     
     forall(<demand, prevStep, nextStep, precedence> in StorageStepForDemandSet)
     {      
-        // Enforce precedences and min/max delay between them.
-        endBeforeStart(productionStepInterval[<demand, prevStep>], productionStepInterval[<demand, nextStep>], maxl(precedence.delayMin, 0));
-        startBeforeEnd(productionStepInterval[<demand, nextStep>], productionStepInterval[<demand, prevStep>], minl(-precedence.delayMax, 0));
+        // Enforce precedences between production steps and min/max delay between them.
+        endBeforeStart
+        (
+            productionStepInterval[<demand, prevStep>], 
+            productionStepInterval[<demand, nextStep>], 
+            maxl(precedence.delayMin, 0)
+        );
 
-        // TODO add storages between each 2 successive production steps
-        // TODO Each storage step needs to fit exactly between the two production steps around it.
+        startBeforeEnd
+        (
+            productionStepInterval[<demand, nextStep>], 
+            productionStepInterval[<demand, prevStep>], 
+            minl(-precedence.delayMax, 0)
+        );
+
+        // Placing the following constraints here instead of upstairs with the rest of the storage constraints
+        // seems to improve the result on Instance4 by about 4000.
+
+        // The time between two consecutive production steps is equal to the length of the storage step between them 
         endAtStart
         (
             productionStepInterval[<demand, prevStep>],
@@ -419,40 +434,43 @@ subject to {
             lengthOf(storageStepInterval[<demand, prevStep, nextStep, precedence>])
         );
 
-        presenceOf(storageStepInterval[<demand, prevStep, nextStep, precedence>]) == (lengthOf(storageStepInterval[<demand, prevStep, nextStep, precedence>]) > 0);  
-        // The intervals for all production steps for a demand must have the same presence value.
-        //presenceOf(productionStepInterval[<demand, prevStep>]) == presenceOf(productionStepInterval[<demand, nextStep>]);
-  
+        // A storage step interval is present iff its length is more than 0.
+        // This is done in order for a demand to be able to be transfered directly to the next production step if no storage is necessary
+        // without having to perform a setup for the storage.
+        presenceOf(storageStepInterval[<demand, prevStep, nextStep, precedence>])
+        ==
+        (lengthOf(storageStepInterval[<demand, prevStep, nextStep, precedence>]) > 0);  
     }
 
-    // the steps on a product of a demand should be spanned in the demand interval
+    // The production steps on a product of a demand should be span the demand's interval.
     forall(demand in Demands)
         span(demandInterval[demand], all(step in Steps : demand.productId == step.productId) productionStepInterval[<demand,step>]);
     
-    // tank intervals with different products and same tank should not overlap
+    // Storage steps on the same tank should not overlap for demands of different products.
     forall(atfss in AlternativeTankForStorageStepSet,
             tank in StorageTanks : tank.storageTankId == atfss.alternativeTank.storageTankId)
             alwaysEqual(tankStoredProductState[tank], alternativeTankForStorageStepInterval[atfss], atfss.demand.productId);
 
-    // tank should not overfill
+    // The maximum capacity of tanks should not be exceeded.
     forall(tank in StorageTanks) {
-        CumulConstraint:
-            tankStoredAmountOverTime[tank] <= tank.quantityMax;
+        tankStoredAmountOverTime[tank] <= tank.quantityMax;
     }
 
-    //storages after the first steps should start after a certain setup time if such is needed.
-    //presenceof => is much better on all instances except 3.
+    // Storages after the first steps should start after a certain setup time if such is needed.
     forall
     (
         atfss in AlternativeTankForStorageStepSet,
         tank in StorageTanks : tank.storageTankId == atfss.alternativeTank.storageTankId && atfss.prevStep.stepId in StartingStepIDSet
     ) 
     { 
+        // presenceOf => is better on all instances except Instance3.
         presenceOf(storageStepInterval[<atfss.demand, atfss.prevStep, atfss.nextStep, atfss.precedence>]) => 
             startOf(storageStepInterval[<atfss.demand, atfss.prevStep, atfss.nextStep, atfss.precedence>]) 
                >= tankSetupTime[tank][atfss.demand.productId][tank.initialProductId];
     }
     
+    // Symmetry breaking constraint for different, but equivalent demands.
+    // Only used on instances with more than 7 equivalent demands in order to not decrease the performance on the other ones.
     if(NumberOfEquivalentDemands > 7) {
         forall
         (
@@ -473,6 +491,7 @@ subject to {
 };     
  
 
+// Outputs
 tuple DemandAssignment {
     key string demandId;
     int startTime;
