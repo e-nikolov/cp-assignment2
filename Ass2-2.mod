@@ -64,6 +64,8 @@ tuple Precedence {
 }
 {Precedence} Precedences = ...;
 
+int maxDelayDiff = max(p in Precedences) (p.delayMax - p.delayMin);
+
 tuple Alternative {
     key string stepId;
     key int alternativeNumber;
@@ -314,7 +316,7 @@ execute {
     // It appears that for larger instances, setting the search phase to first decide on the 
     // alternativeResourceForProductionStepIntervals results in no solutions being found, but without it,
     // it works fine on larger instances.
-    if (Opl.card(Demands) < 33) {
+    if (maxDelayDiff < 200) {
        cp.setSearchPhases(f.searchPhase(alternativeResourceForProductionStepInterval));
     }
     
