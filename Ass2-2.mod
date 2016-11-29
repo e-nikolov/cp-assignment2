@@ -316,7 +316,7 @@ execute {
     // It appears that for larger instances, setting the search phase to first decide on the 
     // alternativeResourceForProductionStepIntervals results in no solutions being found, but without it,
     // it works fine on larger instances.
-    if (maxDelayDiff < 200) {
+    if (maxDelayDiff < 200 || Opl.card(Demands) < 7) {
        cp.setSearchPhases(f.searchPhase(alternativeResourceForProductionStepInterval));
     }
     
@@ -453,23 +453,16 @@ subject to {
             tank in StorageTanks : tank.storageTankId == atfss.alternativeTank.storageTankId)
             alwaysEqual(tankStoredProductState[tank], alternativeTankForStorageStepInterval[atfss], atfss.demand.productId);
 
+    forall(tank in StorageTanks)
+        alwaysEqual(tankStoredProductState[tank], -1, 0, tank.initialProductId);
+        
+
     // The maximum capacity of tanks should not be exceeded.
     forall(tank in StorageTanks) {
         tankStoredAmountOverTime[tank] <= tank.quantityMax;
     }
 
     // Storages after the first steps should start after a certain setup time if such is needed.
-    forall
-    (
-        atfss in AlternativeTankForStorageStepSet,
-        tank in StorageTanks : tank.storageTankId == atfss.alternativeTank.storageTankId && atfss.prevStep.stepId in StartingStepIDSet
-    ) 
-    { 
-        // presenceOf => is better on all instances except Instance3.
-        presenceOf(storageStepInterval[<atfss.demand, atfss.prevStep, atfss.nextStep, atfss.precedence>]) => 
-            startOf(storageStepInterval[<atfss.demand, atfss.prevStep, atfss.nextStep, atfss.precedence>]) 
-               >= tankSetupTime[tank][atfss.demand.productId][tank.initialProductId];
-    }
     
     // Symmetry breaking constraint for different, but equivalent demands.
     // Only used on instances with more than 7 equivalent demands in order to not decrease the performance on the other ones.
